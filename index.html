@@ -117,6 +117,12 @@ button{font-family:inherit;cursor:pointer;}input,select,textarea{font-family:inh
 .addbtn{width:100%;margin-top:12px;background:transparent;border:1px dashed #2e2e2a;color:#6b6860;padding:12px;border-radius:4px;font-size:13px;cursor:pointer;}
 .addcreative{border-color:#d4862a!important;color:#d4862a!important;margin-bottom:16px;font-size:14px;padding:14px;margin-top:0;}
 .crewfoot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:#1a1a18;border-top:1px solid #2e2e2a;padding:10px 16px 14px;text-align:center;font-size:9px;color:#3a3a36;letter-spacing:.15em;text-transform:uppercase;}
+.tdetail-proj{padding:10px 16px;background:#1a1a18;border-bottom:1px solid #2e2e2a;}
+.tdf{padding:12px 0;border-bottom:1px solid #2e2e2a;}
+.tdl{font-size:9px;letter-spacing:.15em;color:#6b6860;text-transform:uppercase;margin-bottom:4px;}
+.tdv{font-size:14px;color:#e8e4da;}
+.tnotes{width:100%;background:#111110;border:1px solid #2e2e2a;border-radius:4px;color:#e8e4da;font-size:14px;padding:10px;outline:none;resize:none;min-height:120px;margin-top:8px;line-height:1.5;}
+.drive-btn{display:block;background:#1a1a18;border:1px solid #2a5a8c;border-radius:4px;padding:10px 14px;color:#4a9eff;font-size:12px;text-decoration:none;margin-top:8px;}
 </style>
 </head>
 <body>
@@ -169,7 +175,7 @@ function apiUrl(extra) {
 var S = {
   user:null,projects:[],tasks:[],shopping:[],personal:[],ideas:[],people:[],voiceInbox:[],trades:[],
   tab:'mac',sv:'today',sf:{type:'all',value:null},
-  projectPage:null,tradeFilter:'all',
+  projectPage:null,taskPage:null,tradeFilter:'all',
   et:null,at:null,as:false,ap:false,ai:false,icat:'all',
   np:'MEDIUM',nc:'daily',nic:'Film',pp:null,addPerson:false,showAddProject:false,
   captureRoute:'MAC'
@@ -213,12 +219,16 @@ function apiCall(params) {
   return fetch(apiUrl(new URLSearchParams(params).toString())).then(function(r){return r.json();});
 }
 
-function switchTab(t){S.tab=t;S.projectPage=null;S.at=null;S.as=false;S.tradeFilter='all';['mac','stringer','creative','people'].forEach(function(x){var b=document.getElementById('nav-'+x);if(b)b.className='nbtn'+(x===t?' active':'');});render();}
-function svSwitch(v){S.sv=v;S.at=null;S.as=false;S.projectPage=null;render();}
+function switchTab(t){S.tab=t;S.projectPage=null;S.taskPage=null;S.at=null;S.as=false;S.tradeFilter='all';['mac','stringer','creative','people'].forEach(function(x){var b=document.getElementById('nav-'+x);if(b)b.className='nbtn'+(x===t?' active':'');});render();}
+function svSwitch(v){S.sv=v;S.at=null;S.as=false;S.projectPage=null;S.taskPage=null;render();}
 
 function render(){
   var hdr=document.getElementById('mainheader');
-  if(S.projectPage){
+  if(S.taskPage){
+    var task=S.tasks.find(function(t){return String(t.ID)===String(S.taskPage);});
+    hdr.className='header detail';
+    hdr.innerHTML='<button class="hback" onclick="S.taskPage=null;render()">←</button><div class="hname project" style="font-size:12px">'+(task?esc(String(task.Description||'').substring(0,45)):'Task')+'</div>';
+  } else if(S.projectPage){
     var proj=S.projects.find(function(p){return p.ID===S.projectPage;});
     hdr.className='header detail';
     hdr.innerHTML='<button class="hback" onclick="S.projectPage=null;S.tradeFilter=\'all\';render()">←</button><div class="hname project">'+(proj?esc(String(proj.Name)):'Project')+'</div>';
@@ -250,7 +260,37 @@ function rMac(){
 function mi(i){var c=CC[i.category]||'#6b6860';return'<div class="mitem"><div class="catdot" style="background:'+c+'"></div><div class="mbody"><div class="mdesc'+(i.done?' done':'')+'">'+esc(i.description)+'</div><div class="mcat">'+esc(i.category)+'</div></div><button class="chkbtn '+(i.done?'done':'undone')+'" onclick="togP(\''+i.id+'\')">'+( i.done?'✓':'○')+'</button></div>';}
 function apf(){var cats=['daily','health','personal','service','financial'];return'<div class="fbox"><input class="finput" id="npt" placeholder="What needs to happen..." autofocus><div class="frow">'+cats.map(function(c){return'<button class="bpill" onclick="setNC(\''+c+'\')" style="background:'+(c===S.nc?CC[c]:'#222220')+';color:'+(c===S.nc?'white':'#6b6860')+'">'+c+'</button>';}).join('')+'</div><div class="facts"><button class="bprim" onclick="subP()">Add</button><button class="bcan" onclick="canAP()">Cancel</button></div></div>';}
 
+function rTaskDetail(){
+  var t=S.tasks.find(function(x){return String(x.ID)===String(S.taskPage);});
+  if(!t)return'<div class="pad"><div class="empty">Task not found</div></div>';
+  var proj=S.projects.find(function(p){return String(p.ID)===String(t.Project);});
+  var STATUSES=['NEW','IN PROGRESS','ON HOLD','DONE'];
+  var notes=String(t.Notes||'');
+  var urlMatch=notes.match(/(https?:\/\/[^\s]+)/);
+  var driveUrl=urlMatch?urlMatch[1]:'';
+  var h='';
+  if(proj){h+='<div class="tdetail-proj"><span style="font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:'+esc(String(proj.Color||'#6b6860'))+'">'+esc(String(proj.Name||''))+'</span></div>';}
+  h+='<div class="pad">';
+  h+='<div class="tdf"><div class="tdl">Task</div><div style="font-size:16px;line-height:1.5;color:#e8e4da;padding-top:2px">'+esc(String(t.Description||''))+'</div></div>';
+  h+='<div style="display:flex;gap:20px;padding:12px 0;border-bottom:1px solid #2e2e2a;flex-wrap:wrap;">';
+  h+='<div><div class="tdl">Trade</div><div class="tdv">'+esc(String(t.Trade||'—'))+'</div></div>';
+  h+='<div><div class="tdl">Assigned</div><div class="tdv">'+esc(String(t.AssignedTo||'—'))+'</div></div>';
+  h+='<div><div class="tdl">Priority</div><div class="tdv" style="color:'+(PC[t.Priority]||'#6b6860')+'">'+esc(String(t.Priority||'—'))+'</div></div>';
+  h+='</div>';
+  if(t.ActionItem){h+='<div class="tdf"><div class="tdl">Action Item</div><div style="font-size:13px;color:#d4862a;padding-top:2px">'+esc(String(t.ActionItem))+'</div></div>';}
+  h+='<div style="padding:14px 0;border-bottom:1px solid #2e2e2a;"><div class="tdl" style="margin-bottom:8px">Status</div><div style="display:flex;gap:6px;flex-wrap:wrap;">';
+  STATUSES.forEach(function(s){var a=t.Status===s;h+='<button class="sact'+(a?' active':'')+'" style="padding:6px 14px;font-size:11px;'+(a?'background:'+(SC[s]||'#2e2e2a')+';color:white;':'')+'" onclick="setTSDetail(\''+t.ID+'\',\''+s+'\')">'+s+'</button>';});
+  h+='</div></div>';
+  h+='<div style="padding-top:16px;"><div class="tdl">Notes &amp; Links</div>';
+  h+='<textarea class="tnotes" id="tnotes-'+t.ID+'" placeholder="Add notes, paste a Google Drive or Photos link...">'+esc(notes)+'</textarea>';
+  if(driveUrl){h+='<a href="'+esc(driveUrl)+'" target="_blank" class="drive-btn">📎 Open Attachment</a>';}
+  h+='<div class="facts" style="margin-top:10px;"><button class="bprim" onclick="saveTaskNotes(\''+t.ID+'\')">Save Notes</button></div>';
+  h+='</div>';
+  return h+'</div>';
+}
+
 function rStringer(){
+  if(S.taskPage) return rTaskDetail();
   if(S.projectPage) return rProjectDetail();
   var own=S.user.role==='owner';
   var h=own?'<div class="subnav">'+sb('today','TODAY')+sb('projects','PROJECTS')+sb('shopping','SHOPPING')+'</div>':'<div class="subnav">'+sb('today','MY TASKS')+sb('shopping','SHOPPING')+'</div>';
@@ -295,9 +335,8 @@ function rProjectDetail(){
 }
 
 function tiDetail(t){
-  var ex=S.et===t.ID;
-  var STATUSES=['NEW','IN PROGRESS','ON HOLD','DONE'];
-  return'<div class="titem"><div class="trow" onclick="togET(\''+t.ID+'\')"><div class="pdot" style="background:'+(PC[t.Priority]||'#6b6860')+'"></div><div class="tbody"><div class="ttrade">'+esc(String(t.Trade||''))+'</div><div class="tdesc'+(t.Status==='DONE'?' done':'')+'">'+esc(String(t.Description||''))+'</div>'+(t.ActionItem?'<div class="taction">→ '+esc(String(t.ActionItem))+'</div>':'')+'<div class="tmeta"><span>'+esc(String(t.AssignedTo||''))+'</span></div></div><span class="sbadge" style="background:'+(SC[t.Status]||'#2e2e2a')+'">'+esc(String(t.Status||''))+'</span></div>'+(ex?'<div class="sacts">'+STATUSES.map(function(s){return'<button class="sact'+(t.Status===s?' active':'')+'" style="'+(t.Status===s?'background:'+SC[s]:'')+'" onclick="setTS(\''+t.ID+'\',\''+s+'\')">'+s+'</button>';}).join('')+'</div>':'')+'</div>';
+  var hasNotes=t.Notes&&String(t.Notes).trim().length>0;
+  return'<div class="titem"><div class="trow" onclick="openTask(\''+t.ID+'\')"><div class="pdot" style="background:'+(PC[t.Priority]||'#6b6860')+'"></div><div class="tbody"><div class="ttrade">'+esc(String(t.Trade||''))+'</div><div class="tdesc'+(t.Status==='DONE'?' done':'')+'">'+esc(String(t.Description||''))+'</div>'+(t.ActionItem?'<div class="taction">→ '+esc(String(t.ActionItem))+'</div>':'')+(hasNotes?'<div class="tmeta"><span style="color:#3a3a36;font-style:italic">'+esc(String(t.Notes).substring(0,55))+(String(t.Notes).length>55?'…':'')+'</span></div>':'')+'<div class="tmeta"><span>'+esc(String(t.AssignedTo||''))+'</span></div></div><span class="sbadge" style="background:'+(SC[t.Status]||'#2e2e2a')+'">'+esc(String(t.Status||''))+'</span></div></div>';
 }
 
 function shiFull(s){
@@ -415,7 +454,22 @@ function rPeople(){
 }
 
 // ─── ACTIONS ─────────────────────────────────────────────────
-function openProject(id){S.projectPage=id;S.tradeFilter='all';S.at=null;S.as=false;render();}
+function openProject(id){S.projectPage=id;S.taskPage=null;S.tradeFilter='all';S.at=null;S.as=false;render();}
+function openTask(id){S.taskPage=id;render();}
+function setTSDetail(id,st){
+  var t=S.tasks.find(function(x){return String(x.ID)===String(id);});
+  if(t)t.Status=st;render();
+  apiCall({action:'updateTaskStatus',id:id,status:st});
+}
+function saveTaskNotes(id){
+  var el=document.getElementById('tnotes-'+id);if(!el)return;
+  var notes=el.value;
+  var t=S.tasks.find(function(x){return String(x.ID)===String(id);});
+  if(t)t.Notes=notes;
+  el.style.borderColor='#4a7c59';
+  setTimeout(function(){var e=document.getElementById('tnotes-'+id);if(e)e.style.borderColor='#2e2e2a';},1200);
+  apiCall({action:'updateTaskNotes',id:id,notes:notes});
+}
 function setTF(t){S.tradeFilter=t;render();}
 function togET(id){S.et=S.et===id?null:id;render();}
 function setTS(id,st){
