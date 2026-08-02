@@ -237,10 +237,14 @@ function render(){
     hdr.innerHTML='<div><div class="htitle">STRINGER OS</div><div class="hname">'+esc(S.user.name+(S.user.role==='owner'?' // Austin TX':' // Crew'))+'</div></div><div class="ubadge"><div class="udot'+(S.user.role!=='owner'?' crew':'')+'"></div><span>'+esc(S.user.name)+'</span></div>';
   }
   var el=document.getElementById('content');
-  if(S.tab==='mac')el.innerHTML=rMac();
-  else if(S.tab==='stringer')el.innerHTML=rStringer();
-  else if(S.tab==='creative')el.innerHTML=rCreative();
-  else if(S.tab==='people')el.innerHTML=rPeople();
+  try{
+    if(S.tab==='mac')el.innerHTML=rMac();
+    else if(S.tab==='stringer')el.innerHTML=rStringer();
+    else if(S.tab==='creative')el.innerHTML=rCreative();
+    else if(S.tab==='people')el.innerHTML=rPeople();
+  }catch(err){
+    el.innerHTML='<div class="pad" style="color:#c0392b;font-size:12px;line-height:1.6"><b>Error:</b> '+err.message+'<br><pre style="font-size:10px;white-space:pre-wrap;margin-top:8px">'+err.stack+'</pre></div>';
+  }
   setTimeout(function(){var a=document.querySelector('[autofocus]');if(a)a.focus();},50);
 }
 
