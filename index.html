@@ -337,6 +337,13 @@ function schedItem(e,own){
   h+='</div></div>';
   if(ex&&canEdit){
     h+='<div style="background:#1a1a18;border-radius:4px;padding:12px;margin-top:8px">';
+    if(own){
+      var projOpts=S.projects.map(function(p){return'<option value="'+esc(String(p.ID))+'"'+(String(p.ID)===String(e.Project)?' selected':'')+'>'+esc(String(p.Name))+'</option>';}).join('');
+      if(e.Project&&!S.projects.some(function(p){return String(p.ID)===String(e.Project);}))projOpts='<option value="'+esc(String(e.Project))+'" selected>'+esc(String(e.Project))+'</option>'+projOpts;
+      h+='<div class="frow"><input class="fsel" id="se-date-'+e.ID+'" value="'+esc(e.Date)+'" placeholder="2026-08-03" style="flex:1"><select class="fsel" id="se-person-'+e.ID+'">'+['Mac','Christian','Mitchell','Tracy'].map(function(nm){return'<option'+(nm===e.Person?' selected':'')+'>'+nm+'</option>';}).join('')+'</select></div>';
+      h+='<input class="finput" id="se-loc-'+e.ID+'" value="'+esc(e.Location)+'" placeholder="Location" style="margin-bottom:10px">';
+      h+='<select class="fsel" id="se-proj-'+e.ID+'" style="width:100%;margin-bottom:10px">'+projOpts+'</select>';
+    }
     h+='<div class="frow"><input class="fsel" id="se-start-'+e.ID+'" value="'+esc(e.StartTime)+'" placeholder="Start" style="flex:1"><input class="fsel" id="se-end-'+e.ID+'" value="'+esc(e.EndTime)+'" placeholder="End" style="flex:1"></div>';
     h+='<textarea class="ftarea" id="se-notes-'+e.ID+'" rows="2" placeholder="Notes">'+esc(e.Notes)+'</textarea>';
     h+='<div class="frow">'+['PLANNED','TENTATIVE','CONFIRMED'].map(function(st){return'<button class="bpill" onclick="setSEStatus(\''+e.ID+'\',\''+st+'\')" style="background:'+(e.Status===st?'#d4862a':'#222220')+';color:'+(e.Status===st?'white':'#6b6860')+';font-size:10px">'+st+'</button>';}).join('')+'</div>';
@@ -356,17 +363,19 @@ function setSEStatus(id,st){
   if(e)e.Status=st;render();
 }
 function saveSE(id){
-  var st=document.getElementById('se-start-'+id);
-  var en=document.getElementById('se-end-'+id);
-  var no=document.getElementById('se-notes-'+id);
   var e=S.schedule.find(function(x){return x.ID===id;});
-  if(e){
-    e.StartTime=st?st.value:e.StartTime;
-    e.EndTime=en?en.value:e.EndTime;
-    e.Notes=no?no.value:e.Notes;
-  }
+  if(!e){S.se=null;render();return;}
+  var g=function(pfx){return document.getElementById('se-'+pfx+'-'+id);};
+  var st=g('start'),en=g('end'),no=g('notes'),dt=g('date'),pe=g('person'),lo=g('loc'),pr=g('proj');
+  if(st)e.StartTime=st.value;
+  if(en)e.EndTime=en.value;
+  if(no)e.Notes=no.value;
+  if(dt&&dt.value.trim())e.Date=dt.value.trim();
+  if(pe)e.Person=pe.value;
+  if(lo)e.Location=lo.value;
+  if(pr)e.Project=pr.value;
   S.se=null;render();
-  apiCall({action:'updateScheduleEntry',id:id,startTime:e.StartTime,endTime:e.EndTime,notes:e.Notes,status:e.Status});
+  apiCall({action:'updateScheduleEntry',id:id,date:e.Date,person:e.Person,startTime:e.StartTime,endTime:e.EndTime,location:e.Location,project:e.Project,notes:e.Notes,status:e.Status});
 }
 function delSE(id){
   S.schedule=S.schedule.filter(function(x){return x.ID!==id;});
