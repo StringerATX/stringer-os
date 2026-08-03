@@ -202,6 +202,12 @@ var PO={HIGH:0,MEDIUM:1,LOW:2};
 function fmt$(n){if(!n&&n!==0)return'—';return'$'+Number(n).toLocaleString();}
 function daysSince(d){if(!d)return 999;return Math.floor((new Date()-new Date(d))/(864e5));}
 function contactColor(d){var n=daysSince(d);return n<7?'#4a7c59':n<14?'#d4862a':'#c0392b';}
+function assigneeNames(){
+  var crew=['Mac','Christian','Mitchell','Tracy'];
+  (S.people||[]).forEach(function(p){var t=String(p.Type||'').toLowerCase();if((t==='sub'||t==='vendor'||t==='crew')&&crew.indexOf(String(p.Name))<0)crew.push(String(p.Name));});
+  return crew;
+}
+function assigneeOptions(sel){var names=assigneeNames();if(sel&&names.indexOf(sel)<0)names=[sel].concat(names);return names.map(function(n){return'<option'+(n===sel?' selected':'')+'>'+esc(n)+'</option>';}).join('');}
 
 // ─── INIT ─────────────────────────────────────────────────────
 TOKEN = getToken();
@@ -302,7 +308,7 @@ function triageForm(v,clean){
   if(!d)return'';
   var projOpts=S.projects.map(function(p){return'<option value="'+esc(String(p.ID))+'">'+esc(String(p.Name))+'</option>';}).join('');
   var tradeOpts=S.trades.map(function(t){return'<option>'+esc(t)+'</option>';}).join('');
-  var whoSel='<select class="fsel" id="tr-who-'+id+'"><option>Mac</option><option>Christian</option><option>Mitchell</option><option>Tracy</option></select>';
+  var whoSel='<select class="fsel" id="tr-who-'+id+'">'+assigneeOptions('Mac')+'</select>';
   var h='<div class="fbox" style="margin-top:8px">';
   if(d==='task'){
     h+='<textarea class="ftarea" id="tr-desc-'+id+'" rows="2">'+esc(clean)+'</textarea>';
@@ -461,7 +467,7 @@ function schedItem(e,own){
     if(own){
       var projOpts=S.projects.map(function(p){return'<option value="'+esc(String(p.ID))+'"'+(String(p.ID)===String(e.Project)?' selected':'')+'>'+esc(String(p.Name))+'</option>';}).join('');
       if(e.Project&&!S.projects.some(function(p){return String(p.ID)===String(e.Project);}))projOpts='<option value="'+esc(String(e.Project))+'" selected>'+esc(String(e.Project))+'</option>'+projOpts;
-      h+='<div class="frow"><input class="fsel" id="se-date-'+e.ID+'" value="'+esc(e.Date)+'" placeholder="2026-08-03" style="flex:1"><select class="fsel" id="se-person-'+e.ID+'">'+['Mac','Christian','Mitchell','Tracy'].map(function(nm){return'<option'+(nm===e.Person?' selected':'')+'>'+nm+'</option>';}).join('')+'</select></div>';
+      h+='<div class="frow"><input class="fsel" id="se-date-'+e.ID+'" value="'+esc(e.Date)+'" placeholder="2026-08-03" style="flex:1"><select class="fsel" id="se-person-'+e.ID+'">'+assigneeOptions(e.Person)+'</select></div>';
       h+='<input class="finput" id="se-loc-'+e.ID+'" value="'+esc(e.Location)+'" placeholder="Location" style="margin-bottom:10px">';
       h+='<select class="fsel" id="se-proj-'+e.ID+'" style="width:100%;margin-bottom:10px">'+projOpts+'</select>';
     }
@@ -475,7 +481,7 @@ function schedItem(e,own){
 }
 
 function schedAddForm(){
-  return'<div class="fbox"><input class="finput" id="sa-date" placeholder="Date (2026-08-03)" autofocus><div class="frow"><select class="fsel" id="sa-person"><option>Mac</option><option>Christian</option><option>Mitchell</option><option>Tracy</option></select><input class="fsel" id="sa-start" placeholder="8:00 AM" style="flex:1"><input class="fsel" id="sa-end" placeholder="4:00 PM" style="flex:1"></div><input class="finput" id="sa-loc" placeholder="Location"><select class="fsel" id="sa-proj" style="margin-bottom:10px">'+S.projects.map(function(p){return'<option value="'+p.ID+'">'+esc(String(p.Name))+'</option>';}).join('')+'</select><textarea class="ftarea" id="sa-notes" rows="2" placeholder="Notes"></textarea><div class="facts"><button class="bprim" onclick="subSE()">Add</button><button class="bcan" onclick="S.sadd=false;render()">Cancel</button></div></div>';
+  return'<div class="fbox"><input class="finput" id="sa-date" placeholder="Date (2026-08-03)" autofocus><div class="frow"><select class="fsel" id="sa-person">'+assigneeOptions('Mac')+'</select><input class="fsel" id="sa-start" placeholder="8:00 AM" style="flex:1"><input class="fsel" id="sa-end" placeholder="4:00 PM" style="flex:1"></div><input class="finput" id="sa-loc" placeholder="Location"><select class="fsel" id="sa-proj" style="margin-bottom:10px">'+S.projects.map(function(p){return'<option value="'+p.ID+'">'+esc(String(p.Name))+'</option>';}).join('')+'</select><textarea class="ftarea" id="sa-notes" rows="2" placeholder="Notes"></textarea><div class="facts"><button class="bprim" onclick="subSE()">Add</button><button class="bcan" onclick="S.sadd=false;render()">Cancel</button></div></div>';
 }
 
 function togSE(id){S.se=S.se===id?null:id;render();}
@@ -571,6 +577,8 @@ function rTaskDetail(){
   if(t.ActionItem)h+='<div class="taction" style="margin-top:10px">→ '+esc(String(t.ActionItem))+'</div>';
   h+='<div class="td-meta"><div><div class="td-mlabel">Assigned</div><div class="td-mval">'+esc(String(t.AssignedTo||'—'))+'</div></div><div><div class="td-mlabel">Priority</div><div class="td-mval" style="color:'+(PC[t.Priority]||'#6b6860')+'">'+esc(String(t.Priority||'—'))+'</div></div></div>';
   h+='<div class="td-slabel">Status</div><div class="sacts" style="padding:0">'+STATUSES.map(function(s){return'<button class="sact'+(t.Status===s?' active':'')+'" style="'+(t.Status===s?'background:'+SC[s]:'')+'" onclick="setTS(\''+t.ID+'\',\''+s+'\')">'+s+'</button>';}).join('')+'</div>';
+  h+='<div class="td-slabel" style="margin-top:16px">Assigned to</div>';
+  h+='<div class="frow"><select class="fsel" id="ta-'+t.ID+'" style="flex:1">'+assigneeOptions(String(t.AssignedTo||''))+'</select><button class="bcan" onclick="saveTaskAssignee(\''+t.ID+'\')">Reassign</button></div>';
   h+='<div class="td-slabel" style="margin-top:18px">Notes</div>';
   h+='<textarea id="tn-'+t.ID+'" class="td-notes" placeholder="Add notes, a Drive/Photos link, details...">'+esc(String(t.Notes||''))+'</textarea>';
   h+='<div class="facts"><button class="bprim" onclick="saveTaskNotes(\''+t.ID+'\')">Save Notes</button>'+(url?'<a class="td-attach" href="'+esc(url)+'" target="_blank" rel="noopener">Open Attachment</a>':'')+'</div>';
@@ -608,13 +616,20 @@ function saveTaskDesc(id){
   apiCall({action:'updateTaskDescription',id:id,description:val});
 }
 
+function saveTaskAssignee(id){
+  var el=document.getElementById('ta-'+id);var who=el?el.value:'';
+  var t=S.tasks.find(function(x){return String(x.ID)===String(id);});
+  if(t)t.AssignedTo=who;render();
+  apiCall({action:'updateTaskAssignee',id:id,assignedTo:who});
+}
+
 function shiFull(s){
   var bt=s.Status==='BOUGHT';
   return'<div class="shitem"><button class="shchk'+(bt?' bought':'')+'" onclick="togSH(\''+s.ID+'\')">'+( bt?'✓':'')+'</button><div class="shbody"><div class="shdesc'+(bt?' bought':'')+'">'+esc(String(s.Material||s.Description||''))+'</div><div class="shmeta"><span style="letter-spacing:.08em;text-transform:uppercase;font-size:9px">'+esc(String(s.Trade||''))+'</span><span>'+esc(String(s.Vendor||''))+'</span>'+(s.Qty?'<span>qty: '+s.Qty+(s.UnitCost?' @ $'+s.UnitCost:'')+'</span>':'')+'</div></div></div>';
 }
 
 function atfDetail(){
-  return'<div class="fbox"><input class="finput" id="ntd" placeholder="Task description..." autofocus><div class="frow"><select class="fsel" id="nttr">'+S.trades.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select><select class="fsel" id="nta"><option>Mac</option><option>Christian</option><option>Mitchell</option><option>Tracy</option></select>'+['HIGH','MEDIUM','LOW'].map(function(p){return'<button class="bpill" onclick="setNP(\''+p+'\')" style="background:'+(S.np===p?PC[p]:'#222220')+';color:'+(S.np===p?'white':'#6b6860')+'">'+p+'</button>';}).join('')+'</div><div class="facts"><button class="bprim" onclick="subT()">Add Task</button><button class="bcan" onclick="canAT()">Cancel</button></div></div>';
+  return'<div class="fbox"><input class="finput" id="ntd" placeholder="Task description..." autofocus><div class="frow"><select class="fsel" id="nttr">'+S.trades.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select><select class="fsel" id="nta">'+assigneeOptions('Mac')+'</select>'+['HIGH','MEDIUM','LOW'].map(function(p){return'<button class="bpill" onclick="setNP(\''+p+'\')" style="background:'+(S.np===p?PC[p]:'#222220')+';color:'+(S.np===p?'white':'#6b6860')+'">'+p+'</button>';}).join('')+'</div><div class="facts"><button class="bprim" onclick="subT()">Add Task</button><button class="bcan" onclick="canAT()">Cancel</button></div></div>';
 }
 
 function asfFull(){
@@ -680,7 +695,7 @@ function tiSimple(t,sp){
 }
 
 function atfSimple(){
-  return'<div class="fbox"><input class="finput" id="ntd" placeholder="Task description..." autofocus><div class="frow"><select class="fsel" id="ntp">'+S.projects.map(function(p){return'<option value="'+p.ID+'">'+esc(String(p.Name))+'</option>';}).join('')+'</select><select class="fsel" id="nttr">'+S.trades.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select><select class="fsel" id="nta"><option>Mac</option><option>Christian</option><option>Mitchell</option><option>Tracy</option></select>'+['HIGH','MEDIUM','LOW'].map(function(p){return'<button class="bpill" onclick="setNP(\''+p+'\')" style="background:'+(S.np===p?PC[p]:'#222220')+';color:'+(S.np===p?'white':'#6b6860')+'">'+p+'</button>';}).join('')+'</div><div class="facts"><button class="bprim" onclick="subT()">Add Task</button><button class="bcan" onclick="canAT()">Cancel</button></div></div>';
+  return'<div class="fbox"><input class="finput" id="ntd" placeholder="Task description..." autofocus><div class="frow"><select class="fsel" id="ntp">'+S.projects.map(function(p){return'<option value="'+p.ID+'">'+esc(String(p.Name))+'</option>';}).join('')+'</select><select class="fsel" id="nttr">'+S.trades.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select><select class="fsel" id="nta">'+assigneeOptions('Mac')+'</select>'+['HIGH','MEDIUM','LOW'].map(function(p){return'<button class="bpill" onclick="setNP(\''+p+'\')" style="background:'+(S.np===p?PC[p]:'#222220')+';color:'+(S.np===p?'white':'#6b6860')+'">'+p+'</button>';}).join('')+'</div><div class="facts"><button class="bprim" onclick="subT()">Add Task</button><button class="bcan" onclick="canAT()">Cancel</button></div></div>';
 }
 
 function rShopping(){
@@ -720,7 +735,7 @@ function rPeople(){
     var col=contactColor(String(p.LastContact));
     h+='<div class="person-item"><div class="person-row" onclick="togPP(\''+p.ID+'\')">';
     h+='<div class="person-dot" style="background:'+col+'"></div>';
-    h+='<div class="person-body"><div class="person-name">'+esc(String(p.Name||''))+'</div><div class="person-role">'+esc(String(p.Role||''))+'</div>';
+    h+='<div class="person-body"><div class="person-name">'+esc(String(p.Name||''))+'</div><div class="person-role">'+esc(String(p.Role||''))+(p.Type&&String(p.Type)!=='Contact'?' · '+esc(String(p.Type)):'')+'</div>';
     if(p.LastContactNote)h+='<div class="person-note">'+esc(String(p.LastContactNote))+'</div>';
     if(p.NextAction)h+='<div class="person-next">→ '+esc(String(p.NextAction))+'</div>';
     var d=daysSince(String(p.LastContact));h+='<div class="person-days">'+(d<999?d+' days ago':'No contact logged')+'</div>';
@@ -729,12 +744,13 @@ function rPeople(){
       h+='<div class="person-detail"><div style="font-size:9px;color:#6b6860;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Update Contact</div>';
       h+='<textarea id="pnote-'+p.ID+'" style="width:100%;background:#111110;border:1px solid #2e2e2a;border-radius:3px;color:#e8e4da;font-size:14px;padding:8px;outline:none;resize:none;height:70px;margin-bottom:8px">'+esc(String(p.LastContactNote||''))+'</textarea>';
       h+='<input id="pnext-'+p.ID+'" style="width:100%;background:#111110;border:1px solid #2e2e2a;border-radius:3px;color:#e8e4da;font-size:14px;padding:8px;outline:none;margin-bottom:10px" value="'+esc(String(p.NextAction||''))+'" placeholder="Next action...">';
+      h+='<div class="frow" style="margin-bottom:10px"><select class="fsel" id="ptype-'+p.ID+'">'+['Sub','Vendor','Client','Contact','Crew'].map(function(tp){return'<option'+(String(p.Type||'Contact')===tp?' selected':'')+'>'+tp+'</option>';}).join('')+'</select><input class="fsel" id="prole-'+p.ID+'" value="'+esc(String(p.Role||''))+'" placeholder="Trade / role (e.g. Electrician)" style="flex:1"></div>';
       h+='<div class="facts"><button class="bprim" onclick="saveContact(\''+p.ID+'\')">Save</button><button class="bcan" onclick="togPP(null)">Cancel</button></div></div>';
     }
     h+='</div>';
   });
   h+='<button class="addbtn" onclick="S.addPerson=true;render()">+ Add contact</button>';
-  if(S.addPerson){h+='<div class="fbox"><input class="finput" id="np-cname" placeholder="Name" autofocus><input class="finput" id="np-crole" placeholder="Role"><input class="finput" id="np-cemail" placeholder="Email"><input class="finput" id="np-cphone" placeholder="Phone"><textarea class="ftarea" id="np-cnote" placeholder="First note" rows="2"></textarea><div class="facts"><button class="bprim" onclick="subPerson()">Add</button><button class="bcan" onclick="S.addPerson=false;render()">Cancel</button></div></div>';}
+  if(S.addPerson){h+='<div class="fbox"><input class="finput" id="np-cname" placeholder="Name" autofocus><div class="frow"><select class="fsel" id="np-ctype"><option>Sub</option><option>Vendor</option><option>Client</option><option selected>Contact</option><option>Crew</option></select><input class="fsel" id="np-crole" placeholder="Trade / role" style="flex:1"></div><input class="finput" id="np-cemail" placeholder="Email"><input class="finput" id="np-cphone" placeholder="Phone"><textarea class="ftarea" id="np-cnote" placeholder="First note" rows="2"></textarea><div class="facts"><button class="bprim" onclick="subPerson()">Add</button><button class="bcan" onclick="S.addPerson=false;render()">Cancel</button></div></div>';}
   return h+'</div>';
 }
 
@@ -775,11 +791,13 @@ function setNIC(c){S.nic=c;render();}
 
 function saveContact(id){
   var n=document.getElementById('pnote-'+id);var x=document.getElementById('pnext-'+id);
-  var nv=n?n.value:'';var xv=x?x.value:'';
-  var p=S.people.find(function(x){return x.ID===id;});
-  if(p){p.LastContactNote=nv;p.NextAction=xv;p.LastContact=new Date().toISOString().slice(0,10);}
+  var tp=document.getElementById('ptype-'+id);var rl=document.getElementById('prole-'+id);
+  var nv=n?n.value:'';var xv=x?x.value:'';var tv=tp?tp.value:'';var rv=rl?rl.value:'';
+  var p=S.people.find(function(y){return y.ID===id;});
+  if(p){p.LastContactNote=nv;p.NextAction=xv;if(tv)p.Type=tv;if(rv)p.Role=rv;p.LastContact=new Date().toISOString().slice(0,10);}
   S.pp=null;render();
   apiCall({action:'updateLastContact',id:id,note:nv,nextAction:xv});
+  if(tv||rv)apiCall({action:'updatePersonType',id:id,type:tv,role:rv});
 }
 
 function doneVoice(id){
@@ -840,10 +858,10 @@ function rmI(id){S.ideas=S.ideas.filter(function(i){return i.id!==id;});render()
 
 function subPerson(){
   var n=document.getElementById('np-cname');if(!n||!n.value.trim())return;
-  var r=document.getElementById('np-crole');var e=document.getElementById('np-cemail');var ph=document.getElementById('np-cphone');var nt=document.getElementById('np-cnote');
-  var person={ID:'tmp'+Date.now(),Name:n.value.trim(),Role:r?r.value:'',Email:e?e.value:'',Phone:ph?ph.value:'',LastContact:new Date().toISOString().slice(0,10),LastContactNote:nt?nt.value:'',NextAction:'',Project:''};
+  var r=document.getElementById('np-crole');var e=document.getElementById('np-cemail');var ph=document.getElementById('np-cphone');var nt=document.getElementById('np-cnote');var ty=document.getElementById('np-ctype');
+  var person={ID:'tmp'+Date.now(),Name:n.value.trim(),Role:r?r.value:'',Email:e?e.value:'',Phone:ph?ph.value:'',LastContact:new Date().toISOString().slice(0,10),LastContactNote:nt?nt.value:'',NextAction:'',Project:'',Type:ty?ty.value:'Contact'};
   S.people.push(person);S.addPerson=false;render();
-  apiCall({action:'addPerson',name:person.Name,role:person.Role,email:person.Email,phone:person.Phone,note:person.LastContactNote});
+  apiCall({action:'addPerson',name:person.Name,role:person.Role,email:person.Email,phone:person.Phone,note:person.LastContactNote,type:person.Type});
 }
 
 function subProject(){
