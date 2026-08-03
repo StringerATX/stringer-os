@@ -66,6 +66,7 @@ button{font-family:inherit;cursor:pointer;}input,select,textarea{font-family:inh
 .td-delnote{font-size:10px;color:#6b6860;margin-top:8px;line-height:1.4;}
 .td-descedit{width:100%;background:#111110;border:1px solid #2e2e2a;border-radius:4px;color:#e8e4da;font-size:16px;font-weight:500;line-height:1.35;padding:8px;outline:none;resize:vertical;min-height:60px;margin-top:2px;}
 .td-editlink{background:transparent;border:none;color:#6b6860;font-size:11px;padding:4px 0 0;margin-top:2px;text-decoration:underline;}
+.restorebtn{margin-top:8px;background:#222220;border:none;color:#4a7c59;padding:5px 10px;border-radius:3px;font-size:11px;}
 .pcard{margin-bottom:8px;background:#1a1a18;border-radius:6px;overflow:hidden;border:1px solid #2e2e2a;cursor:pointer;}
 .phdr{width:100%;background:transparent;border:none;padding:13px 14px;display:flex;align-items:center;gap:10px;text-align:left;}
 .pbar{width:3px;height:36px;border-radius:2px;flex-shrink:0;}
@@ -183,12 +184,12 @@ function apiUrl(extra) {
 }
 
 var S = {
-  user:null,projects:[],tasks:[],shopping:[],personal:[],ideas:[],people:[],voiceInbox:[],trades:[],schedule:[],
+  user:null,projects:[],tasks:[],shopping:[],personal:[],ideas:[],people:[],voiceInbox:[],trades:[],schedule:[],tasksArchive:[],
   tab:'mac',sv:'today',sf:{type:'all',value:null},
   projectPage:null,taskPage:null,tradeFilter:'all',
   et:null,at:null,as:false,ap:false,ai:false,icat:'all',
   np:'MEDIUM',nc:'daily',nic:'Film',pp:null,addPerson:false,showAddProject:false,
-  captureRoute:'MAC',se:null,sadd:false,tdDel:false,tdEditDesc:false
+  captureRoute:'MAC',se:null,sadd:false,tdDel:false,tdEditDesc:false,showArchive:false
 };
 var PC={HIGH:'#c0392b',MEDIUM:'#d4862a',LOW:'#6b6860'};
 var SC={'NEW':'#2a5a8c','IN PROGRESS':'#d4862a','ON HOLD':'#6b6860','DONE':'#4a7c59'};
@@ -212,7 +213,7 @@ if (!TOKEN) {
       S.user=d.user; S.projects=d.projects||[]; S.tasks=d.tasks||[];
       S.shopping=d.shopping||[]; S.personal=d.personal||[]; S.ideas=d.ideas||[];
       S.people=d.people||[]; S.voiceInbox=d.voiceInbox||[]; S.trades=d.trades||[];
-      S.schedule=d.schedule||[];
+      S.schedule=d.schedule||[]; S.tasksArchive=d.tasksArchive||[];
       S.tab=d.user.role==='owner'?'mac':'stringer';
       document.getElementById('loading').style.display='none';
       document.getElementById('app').style.display='block';
@@ -537,7 +538,24 @@ function rToday(){
     mine.forEach(function(t){h+=tiSimple(t,false);});
   }
   h+=S.at==='today'?atfSimple():'<button class="addbtn" onclick="startAT(\'today\')">+ Add task</button>';
+  if(own&&S.tasksArchive&&S.tasksArchive.length){
+    h+='<button class="addbtn" style="margin-top:16px" onclick="S.showArchive=!S.showArchive;render()">'+(S.showArchive?'Hide':'Show')+' recently deleted ('+S.tasksArchive.length+')</button>';
+    if(S.showArchive)S.tasksArchive.forEach(function(a){h+=archiveItem(a);});
+  }
   return h;
+}
+
+function archiveItem(a){
+  var when=String(a.DeletedAt||'');var why=String(a.DeletedReason||'');
+  return'<div class="titem"><div class="trow"><div class="tbody"><div class="tdesc" style="color:#6b6860;text-decoration:line-through">'+esc(String(a.Description||''))+'</div><div class="tmeta"><span>deleted '+esc(when)+(why?' · '+esc(why):'')+'</span></div><button class="restorebtn" onclick="restoreTask(\''+a.ID+'\')">↺ Restore</button></div></div></div>';
+}
+
+function restoreTask(id){
+  var a=S.tasksArchive.find(function(x){return String(x.ID)===String(id);});
+  S.tasksArchive=S.tasksArchive.filter(function(x){return String(x.ID)!==String(id);});
+  if(a)S.tasks.push({ID:a.ID,Project:a.Project,Trade:a.Trade,Description:a.Description,AssignedTo:a.AssignedTo,Priority:a.Priority,Status:a.Status,ActionItem:a.ActionItem,Notes:a.Notes});
+  render();
+  apiCall({action:'restoreTask',id:id});
 }
 
 function tiSimple(t,sp){
