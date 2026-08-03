@@ -145,6 +145,7 @@ button{font-family:inherit;cursor:pointer;}input,select,textarea{font-family:inh
   </div>
   <div class="content" id="content"></div>
   <div class="bnav" id="bnav" style="display:none">
+    <button class="nbtn" id="nav-inbox" onclick="switchTab('inbox')"><span class="nicon">▤</span><span class="nlabel" id="inbox-label">INBOX</span></button>
     <button class="nbtn active" id="nav-mac" onclick="switchTab('mac')"><span class="nicon">◉</span><span class="nlabel">MAC</span></button>
     <button class="nbtn" id="nav-stringer" onclick="switchTab('stringer')"><span class="nicon">⬡</span><span class="nlabel">STRINGER</span></button>
     <button class="nbtn" id="nav-creative" onclick="switchTab('creative')"><span class="nicon">✦</span><span class="nlabel">CREATIVE</span></button>
@@ -189,7 +190,8 @@ var S = {
   projectPage:null,taskPage:null,tradeFilter:'all',
   et:null,at:null,as:false,ap:false,ai:false,icat:'all',
   np:'MEDIUM',nc:'daily',nic:'Film',pp:null,addPerson:false,showAddProject:false,
-  captureRoute:'MAC',se:null,sadd:false,tdDel:false,tdEditDesc:false,showArchive:false
+  captureRoute:'MAC',se:null,sadd:false,tdDel:false,tdEditDesc:false,showArchive:false,
+  triageId:null,triageDest:null
 };
 var PC={HIGH:'#c0392b',MEDIUM:'#d4862a',LOW:'#6b6860'};
 var SC={'NEW':'#2a5a8c','IN PROGRESS':'#d4862a','ON HOLD':'#6b6860','DONE':'#4a7c59'};
@@ -231,7 +233,7 @@ function apiCall(params) {
   return fetch(apiUrl(new URLSearchParams(params).toString())).then(function(r){return r.json();});
 }
 
-function switchTab(t){S.tab=t;S.projectPage=null;S.taskPage=null;S.at=null;S.as=false;S.tradeFilter='all';['mac','stringer','creative','people'].forEach(function(x){var b=document.getElementById('nav-'+x);if(b)b.className='nbtn'+(x===t?' active':'');});render();}
+function switchTab(t){S.tab=t;S.projectPage=null;S.taskPage=null;S.at=null;S.as=false;S.tradeFilter='all';S.triageId=null;S.triageDest=null;['inbox','mac','stringer','creative','people'].forEach(function(x){var b=document.getElementById('nav-'+x);if(b)b.className='nbtn'+(x===t?' active':'');});render();}
 function svSwitch(v){S.sv=v;S.at=null;S.as=false;S.projectPage=null;S.taskPage=null;render();}
 
 function render(){
@@ -251,23 +253,136 @@ function render(){
   }
   var el=document.getElementById('content');
   try{
-    if(S.tab==='mac')el.innerHTML=rMac();
+    if(S.tab==='inbox')el.innerHTML=rInbox();
+    else if(S.tab==='mac')el.innerHTML=rMac();
     else if(S.tab==='stringer')el.innerHTML=rStringer();
     else if(S.tab==='creative')el.innerHTML=rCreative();
     else if(S.tab==='people')el.innerHTML=rPeople();
   }catch(err){
     el.innerHTML='<div class="pad" style="color:#c0392b;font-size:12px;line-height:1.6"><b>Error:</b> '+err.message+'<br><pre style="font-size:10px;white-space:pre-wrap;margin-top:8px">'+err.stack+'</pre></div>';
   }
+  var ib=document.getElementById('inbox-label');
+  if(ib){var n=(S.voiceInbox||[]).length;ib.textContent='INBOX'+(n?' ('+n+')':'');}
   setTimeout(function(){var a=document.querySelector('[autofocus]');if(a)a.focus();},50);
+}
+
+// ─── INBOX + TRIAGE ───────────────────────────────────────────
+function inboxClean(raw){return String(raw||'').replace(/^\[(MAC|STRINGER|CREATIVE|PEOPLE)\]\s*/i,'');}
+function routeDefault(raw){
+  var m=String(raw||'').match(/^\[(MAC|STRINGER|CREATIVE|PEOPLE)\]/i);
+  if(!m)return'task';
+  var t=m[1].toUpperCase();
+  return t==='STRINGER'?'task':t==='CREATIVE'?'idea':t==='PEOPLE'?'contact':'personal';
+}
+function rInbox(){
+  var items=S.voiceInbox||[];
+  var h='<div class="pad">'+sl('Inbox',items.length);
+  if(!items.length)h+='<div class="empty">Inbox zero — nothing to triage</div>';
+  items.forEach(function(v){h+=inboxItem(v);});
+  return h+'</div>';
+}
+function inboxItem(v){
+  var open=S.triageId===v.ID;
+  var clean=inboxClean(v.Raw);
+  var h='<div class="vi-item">';
+  h+='<div class="vi-raw">'+esc(clean)+'</div>';
+  h+='<div class="vi-meta"><span>'+esc(String(v.Source||''))+'</span><span>'+esc(String(v.CreatedAt||''))+'</span></div>';
+  if(open){
+    var dests=[['task','Task'],['material','Material'],['idea','Idea'],['sched','Schedule'],['personal','Personal'],['contact','Contact']];
+    h+='<div class="route-chips" style="margin-top:8px">'+dests.map(function(d){return'<button class="route-chip'+(S.triageDest===d[0]?' active':'')+'" onclick="setTriageDest(\''+d[0]+'\')">'+d[1]+'</button>';}).join('')+'</div>';
+    h+=triageForm(v,clean);
+    h+='<div class="vi-actions" style="margin-top:8px"><button class="vi-btn" onclick="closeTriage()">Cancel</button><button class="vi-btn" style="color:#c0392b" onclick="dismissInbox(\''+v.ID+'\')">Dismiss</button></div>';
+  }else{
+    h+='<div class="vi-actions"><button class="vi-btn vi-done" onclick="openTriage(\''+v.ID+'\')">Triage</button></div>';
+  }
+  return h+'</div>';
+}
+function triageForm(v,clean){
+  var id=v.ID,d=S.triageDest;
+  if(!d)return'';
+  var projOpts=S.projects.map(function(p){return'<option value="'+esc(String(p.ID))+'">'+esc(String(p.Name))+'</option>';}).join('');
+  var tradeOpts=S.trades.map(function(t){return'<option>'+esc(t)+'</option>';}).join('');
+  var whoSel='<select class="fsel" id="tr-who-'+id+'"><option>Mac</option><option>Christian</option><option>Mitchell</option><option>Tracy</option></select>';
+  var h='<div class="fbox" style="margin-top:8px">';
+  if(d==='task'){
+    h+='<textarea class="ftarea" id="tr-desc-'+id+'" rows="2">'+esc(clean)+'</textarea>';
+    h+='<div class="frow"><select class="fsel" id="tr-proj-'+id+'">'+projOpts+'</select><select class="fsel" id="tr-trade-'+id+'">'+tradeOpts+'</select></div>';
+    h+='<div class="frow">'+whoSel+'<select class="fsel" id="tr-prio-'+id+'"><option>HIGH</option><option selected>MEDIUM</option><option>LOW</option></select></div>';
+    h+=triageBtn(id,'Make Task');
+  }else if(d==='material'){
+    h+='<textarea class="ftarea" id="tr-desc-'+id+'" rows="2">'+esc(clean)+'</textarea>';
+    h+='<div class="frow"><select class="fsel" id="tr-proj-'+id+'">'+projOpts+'</select><select class="fsel" id="tr-trade-'+id+'">'+tradeOpts+'</select></div>';
+    h+='<div class="frow"><input class="fsel" id="tr-qty-'+id+'" type="number" value="1" style="width:64px"><input class="fsel" id="tr-vendor-'+id+'" placeholder="Vendor" style="flex:1"></div>';
+    h+=triageBtn(id,'Add Material');
+  }else if(d==='idea'){
+    h+='<textarea class="ftarea" id="tr-desc-'+id+'" rows="3">'+esc(clean)+'</textarea>';
+    h+='<select class="fsel" id="tr-cat-'+id+'" style="margin-bottom:6px">'+IC.map(function(c){return'<option>'+esc(c)+'</option>';}).join('')+'</select>';
+    h+=triageBtn(id,'Save Idea');
+  }else if(d==='sched'){
+    h+='<div class="frow"><input class="fsel" id="tr-date-'+id+'" placeholder="2026-08-05" style="flex:1">'+whoSel+'</div>';
+    h+='<div class="frow"><input class="fsel" id="tr-start-'+id+'" placeholder="8:00 AM" style="flex:1"><input class="fsel" id="tr-end-'+id+'" placeholder="4:00 PM" style="flex:1"></div>';
+    h+='<input class="finput" id="tr-loc-'+id+'" placeholder="Location"><select class="fsel" id="tr-proj-'+id+'" style="width:100%;margin-bottom:8px">'+projOpts+'</select>';
+    h+='<textarea class="ftarea" id="tr-desc-'+id+'" rows="2" placeholder="Notes">'+esc(clean)+'</textarea>';
+    h+=triageBtn(id,'Add to Schedule');
+  }else if(d==='personal'){
+    h+='<textarea class="ftarea" id="tr-desc-'+id+'" rows="2">'+esc(clean)+'</textarea>';
+    h+='<select class="fsel" id="tr-cat-'+id+'" style="margin-bottom:6px">'+['daily','health','personal','service','financial'].map(function(c){return'<option>'+c+'</option>';}).join('')+'</select>';
+    h+=triageBtn(id,'Add Personal');
+  }else if(d==='contact'){
+    h+='<input class="finput" id="tr-name-'+id+'" value="'+esc(clean)+'" placeholder="Name">';
+    h+='<input class="finput" id="tr-role-'+id+'" placeholder="Role"><input class="finput" id="tr-email-'+id+'" placeholder="Email"><input class="finput" id="tr-phone-'+id+'" placeholder="Phone">';
+    h+='<textarea class="ftarea" id="tr-note-'+id+'" rows="2" placeholder="First note"></textarea>';
+    h+=triageBtn(id,'Add Contact');
+  }
+  return h+'</div>';
+}
+function triageBtn(id,label){return'<div class="facts" style="margin-top:4px"><button class="bprim" onclick="doTriage(\''+id+'\')">'+esc(label)+'</button></div>';}
+function openTriage(id){S.triageId=id;var v=(S.voiceInbox||[]).find(function(x){return String(x.ID)===String(id);});S.triageDest=v?routeDefault(v.Raw):'task';S.np='MEDIUM';S.nic='Film';S.nc='daily';render();}
+function setTriageDest(d){S.triageDest=d;render();}
+function closeTriage(){S.triageId=null;S.triageDest=null;render();}
+function dismissInbox(id){S.voiceInbox=(S.voiceInbox||[]).filter(function(x){return String(x.ID)!==String(id);});closeTriage();apiCall({action:'processVoiceEntry',id:id});}
+function doTriage(id){
+  var v=(S.voiceInbox||[]).find(function(x){return String(x.ID)===String(id);});
+  if(!v){closeTriage();return;}
+  var g=function(k){var el=document.getElementById('tr-'+k+'-'+id);return el?el.value:'';};
+  var today=new Date().toISOString().slice(0,10);var d=S.triageDest;
+  if(d==='task'){
+    var desc=g('desc').trim();if(!desc)return;
+    var task={ID:'tmp'+Date.now(),Project:g('proj'),Trade:g('trade')||'General',Description:desc,AssignedTo:g('who')||'Mac',Priority:g('prio')||'MEDIUM',Status:'NEW',ActionItem:'',Notes:''};
+    S.tasks.push(task);
+    apiCall({action:'addTask',project:task.Project,trade:task.Trade,description:task.Description,assignedTo:task.AssignedTo,priority:task.Priority,source:'Inbox'});
+  }else if(d==='material'){
+    var m=g('desc').trim();if(!m)return;
+    var item={ID:'tmp'+Date.now(),Project:g('proj'),Trade:g('trade')||'General',Material:m,Qty:parseFloat(g('qty'))||1,Vendor:g('vendor').trim()||'TBD',Status:'NEEDED'};
+    S.shopping.push(item);
+    apiCall({action:'addShoppingItem',project:item.Project,trade:item.Trade,material:item.Material,qty:item.Qty,vendor:item.Vendor,source:'Inbox'});
+  }else if(d==='idea'){
+    var tx=g('desc').trim();if(!tx)return;
+    S.ideas.unshift({id:'i'+Date.now(),text:tx,category:g('cat')||'Film',createdAt:today});
+    apiCall({action:'saveIdeas',ideas:JSON.stringify(S.ideas)});
+  }else if(d==='sched'){
+    var dt=g('date').trim();if(!dt)return;
+    var e={ID:'tmp'+Date.now(),Date:dt,Person:g('who')||'Mac',StartTime:g('start'),EndTime:g('end'),Location:g('loc'),Project:g('proj'),Notes:g('desc'),Status:'PLANNED'};
+    S.schedule.push(e);
+    apiCall({action:'addScheduleEntry',date:e.Date,person:e.Person,startTime:e.StartTime,endTime:e.EndTime,location:e.Location,project:e.Project,notes:e.Notes});
+  }else if(d==='personal'){
+    var pd=g('desc').trim();if(!pd)return;
+    S.personal.push({id:'p'+Date.now(),description:pd,done:false,category:g('cat')||'daily',createdAt:today});
+    apiCall({action:'savePersonalItems',items:JSON.stringify(S.personal)});
+  }else if(d==='contact'){
+    var nm=g('name').trim();if(!nm)return;
+    var person={ID:'tmp'+Date.now(),Name:nm,Role:g('role'),Email:g('email'),Phone:g('phone'),LastContact:today,LastContactNote:g('note'),NextAction:'',Project:''};
+    S.people.push(person);
+    apiCall({action:'addPerson',name:person.Name,role:person.Role,email:person.Email,phone:person.Phone,note:person.LastContactNote});
+  }else{closeTriage();return;}
+  S.voiceInbox=(S.voiceInbox||[]).filter(function(x){return String(x.ID)!==String(id);});
+  closeTriage();
+  apiCall({action:'processVoiceEntry',id:id});
 }
 
 function rMac(){
   var h='<div class="pad">';
-  if(S.voiceInbox&&S.voiceInbox.length){
-    h+=sl('Inbox',S.voiceInbox.length);
-    S.voiceInbox.forEach(function(v){h+='<div class="vi-item"><div class="vi-raw">'+esc(String(v.Raw))+'</div><div class="vi-meta"><span>'+esc(String(v.Source))+'</span><span>'+esc(String(v.CreatedAt))+'</span></div><div class="vi-actions"><button class="vi-btn vi-done" onclick="doneVoice(\''+v.ID+'\')">Done</button></div></div>';});
-    h+=sl("Today's Focus",S.personal.filter(function(i){return!i.done;}).length,'margin-top:20px');
-  }else{h+=sl("Today's Focus",S.personal.filter(function(i){return!i.done;}).length);}
+  h+=sl("Today's Focus",S.personal.filter(function(i){return!i.done;}).length);
   S.personal.filter(function(i){return!i.done;}).forEach(function(i){h+=mi(i);});
   var done=S.personal.filter(function(i){return i.done;});
   if(done.length){h+=sl('Done',done.length,'margin-top:20px');done.forEach(function(i){h+=mi(i);});}
