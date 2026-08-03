@@ -61,6 +61,9 @@ button{font-family:inherit;cursor:pointer;}input,select,textarea{font-family:inh
 .td-slabel{font-size:9px;letter-spacing:.18em;color:#6b6860;text-transform:uppercase;margin:16px 0 8px;}
 .td-notes{width:100%;background:#111110;border:1px solid #2e2e2a;border-radius:4px;color:#e8e4da;font-size:15px;padding:10px;outline:none;resize:vertical;min-height:120px;margin-bottom:12px;}
 .td-attach{background:#222220;color:#d4862a;padding:11px 16px;border-radius:4px;font-size:14px;text-decoration:none;display:inline-flex;align-items:center;}
+.td-delbtn{margin-top:24px;background:transparent;border:1px solid #3a2422;color:#a04a3c;padding:10px 14px;border-radius:4px;font-size:13px;}
+.td-del{margin-top:20px;background:#1a1010;border:1px solid #3a2422;border-radius:6px;padding:14px;}
+.td-delnote{font-size:10px;color:#6b6860;margin-top:8px;line-height:1.4;}
 .pcard{margin-bottom:8px;background:#1a1a18;border-radius:6px;overflow:hidden;border:1px solid #2e2e2a;cursor:pointer;}
 .phdr{width:100%;background:transparent;border:none;padding:13px 14px;display:flex;align-items:center;gap:10px;text-align:left;}
 .pbar{width:3px;height:36px;border-radius:2px;flex-shrink:0;}
@@ -183,7 +186,7 @@ var S = {
   projectPage:null,taskPage:null,tradeFilter:'all',
   et:null,at:null,as:false,ap:false,ai:false,icat:'all',
   np:'MEDIUM',nc:'daily',nic:'Film',pp:null,addPerson:false,showAddProject:false,
-  captureRoute:'MAC',se:null,sadd:false
+  captureRoute:'MAC',se:null,sadd:false,tdDel:false
 };
 var PC={HIGH:'#c0392b',MEDIUM:'#d4862a',LOW:'#6b6860'};
 var SC={'NEW':'#2a5a8c','IN PROGRESS':'#d4862a','ON HOLD':'#6b6860','DONE':'#4a7c59'};
@@ -447,7 +450,22 @@ function rTaskDetail(){
   h+='<div class="td-slabel" style="margin-top:18px">Notes</div>';
   h+='<textarea id="tn-'+t.ID+'" class="td-notes" placeholder="Add notes, a Drive/Photos link, details...">'+esc(String(t.Notes||''))+'</textarea>';
   h+='<div class="facts"><button class="bprim" onclick="saveTaskNotes(\''+t.ID+'\')">Save Notes</button>'+(url?'<a class="td-attach" href="'+esc(url)+'" target="_blank" rel="noopener">Open Attachment</a>':'')+'</div>';
+  if(S.user.role==='owner'){
+    if(S.tdDel){
+      h+='<div class="td-del"><div class="td-slabel" style="margin-top:0">Delete this task?</div><input class="finput" id="td-reason-'+t.ID+'" placeholder="Reason (optional) — e.g. completed, duplicate" autofocus><div class="facts"><button class="bprim" style="background:#c0392b" onclick="confirmDelTask(\''+t.ID+'\')">Confirm delete</button><button class="bcan" onclick="S.tdDel=false;render()">Cancel</button></div><div class="td-delnote">Saved to TASKS_ARCHIVE with today\'s date and your reason — recoverable there.</div></div>';
+    } else {
+      h+='<button class="td-delbtn" onclick="S.tdDel=true;render()">Delete task</button>';
+    }
+  }
   return h+'</div>';
+}
+
+function confirmDelTask(id){
+  var el=document.getElementById('td-reason-'+id);
+  var reason=el?el.value.trim():'';
+  S.tasks=S.tasks.filter(function(x){return String(x.ID)!==String(id);});
+  S.taskPage=null;S.tdDel=false;render();
+  apiCall({action:'deleteTask',id:id,reason:reason});
 }
 
 function saveTaskNotes(id){
@@ -572,7 +590,7 @@ function rPeople(){
 
 // ─── ACTIONS ─────────────────────────────────────────────────
 function openProject(id){S.projectPage=id;S.taskPage=null;S.tradeFilter='all';S.at=null;S.as=false;render();}
-function openTask(id){S.taskPage=id;S.et=null;render();}
+function openTask(id){S.taskPage=id;S.et=null;S.tdDel=false;render();}
 function setTF(t){S.tradeFilter=t;render();}
 function togET(id){S.et=S.et===id?null:id;render();}
 function setTS(id,st){
