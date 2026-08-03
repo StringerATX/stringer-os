@@ -64,6 +64,8 @@ button{font-family:inherit;cursor:pointer;}input,select,textarea{font-family:inh
 .td-delbtn{margin-top:24px;background:transparent;border:1px solid #3a2422;color:#a04a3c;padding:10px 14px;border-radius:4px;font-size:13px;}
 .td-del{margin-top:20px;background:#1a1010;border:1px solid #3a2422;border-radius:6px;padding:14px;}
 .td-delnote{font-size:10px;color:#6b6860;margin-top:8px;line-height:1.4;}
+.td-descedit{width:100%;background:#111110;border:1px solid #2e2e2a;border-radius:4px;color:#e8e4da;font-size:16px;font-weight:500;line-height:1.35;padding:8px;outline:none;resize:vertical;min-height:60px;margin-top:2px;}
+.td-editlink{background:transparent;border:none;color:#6b6860;font-size:11px;padding:4px 0 0;margin-top:2px;text-decoration:underline;}
 .pcard{margin-bottom:8px;background:#1a1a18;border-radius:6px;overflow:hidden;border:1px solid #2e2e2a;cursor:pointer;}
 .phdr{width:100%;background:transparent;border:none;padding:13px 14px;display:flex;align-items:center;gap:10px;text-align:left;}
 .pbar{width:3px;height:36px;border-radius:2px;flex-shrink:0;}
@@ -186,7 +188,7 @@ var S = {
   projectPage:null,taskPage:null,tradeFilter:'all',
   et:null,at:null,as:false,ap:false,ai:false,icat:'all',
   np:'MEDIUM',nc:'daily',nic:'Film',pp:null,addPerson:false,showAddProject:false,
-  captureRoute:'MAC',se:null,sadd:false,tdDel:false
+  captureRoute:'MAC',se:null,sadd:false,tdDel:false,tdEditDesc:false
 };
 var PC={HIGH:'#c0392b',MEDIUM:'#d4862a',LOW:'#6b6860'};
 var SC={'NEW':'#2a5a8c','IN PROGRESS':'#d4862a','ON HOLD':'#6b6860','DONE':'#4a7c59'};
@@ -443,7 +445,13 @@ function rTaskDetail(){
   var STATUSES=['NEW','IN PROGRESS','ON HOLD','DONE'];
   var url=firstUrl(t.Notes);
   var h='<div class="pad">';
-  h+='<div class="td-top"><div class="pdot" style="background:'+(PC[t.Priority]||'#6b6860')+';margin-top:7px"></div><div style="flex:1"><div class="ttrade">'+esc(String(t.Trade||'General'))+(proj?' · '+esc(String(proj.Name)):'')+'</div><div class="td-desc'+(t.Status==='DONE'?' done':'')+'">'+esc(String(t.Description||''))+'</div></div></div>';
+  h+='<div class="td-top"><div class="pdot" style="background:'+(PC[t.Priority]||'#6b6860')+';margin-top:7px"></div><div style="flex:1"><div class="ttrade">'+esc(String(t.Trade||'General'))+(proj?' · '+esc(String(proj.Name)):'')+'</div>';
+  if(S.tdEditDesc){
+    h+='<textarea id="td-desc-'+t.ID+'" class="td-descedit" autofocus>'+esc(String(t.Description||''))+'</textarea><div class="facts" style="margin-top:8px"><button class="bprim" onclick="saveTaskDesc(\''+t.ID+'\')">Save</button><button class="bcan" onclick="S.tdEditDesc=false;render()">Cancel</button></div>';
+  }else{
+    h+='<div class="td-desc'+(t.Status==='DONE'?' done':'')+'">'+esc(String(t.Description||''))+'</div><button class="td-editlink" onclick="S.tdEditDesc=true;render()">Edit</button>';
+  }
+  h+='</div></div>';
   if(t.ActionItem)h+='<div class="taction" style="margin-top:10px">→ '+esc(String(t.ActionItem))+'</div>';
   h+='<div class="td-meta"><div><div class="td-mlabel">Assigned</div><div class="td-mval">'+esc(String(t.AssignedTo||'—'))+'</div></div><div><div class="td-mlabel">Priority</div><div class="td-mval" style="color:'+(PC[t.Priority]||'#6b6860')+'">'+esc(String(t.Priority||'—'))+'</div></div></div>';
   h+='<div class="td-slabel">Status</div><div class="sacts" style="padding:0">'+STATUSES.map(function(s){return'<button class="sact'+(t.Status===s?' active':'')+'" style="'+(t.Status===s?'background:'+SC[s]:'')+'" onclick="setTS(\''+t.ID+'\',\''+s+'\')">'+s+'</button>';}).join('')+'</div>';
@@ -473,6 +481,15 @@ function saveTaskNotes(id){
   var t=S.tasks.find(function(x){return String(x.ID)===String(id);});
   if(t)t.Notes=val;render();
   apiCall({action:'updateTaskNotes',id:id,notes:val});
+}
+
+function saveTaskDesc(id){
+  var el=document.getElementById('td-desc-'+id);var val=el?el.value.trim():'';
+  if(!val)return; // don't allow a blank description
+  var t=S.tasks.find(function(x){return String(x.ID)===String(id);});
+  if(t)t.Description=val;
+  S.tdEditDesc=false;render();
+  apiCall({action:'updateTaskDescription',id:id,description:val});
 }
 
 function shiFull(s){
@@ -590,7 +607,7 @@ function rPeople(){
 
 // ─── ACTIONS ─────────────────────────────────────────────────
 function openProject(id){S.projectPage=id;S.taskPage=null;S.tradeFilter='all';S.at=null;S.as=false;render();}
-function openTask(id){S.taskPage=id;S.et=null;S.tdDel=false;render();}
+function openTask(id){S.taskPage=id;S.et=null;S.tdDel=false;S.tdEditDesc=false;render();}
 function setTF(t){S.tradeFilter=t;render();}
 function togET(id){S.et=S.et===id?null:id;render();}
 function setTS(id,st){
