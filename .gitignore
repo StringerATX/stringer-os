@@ -1,0 +1,7 @@
+# Sensitive / local — never commit to this PUBLIC repo.
+# Real tokens + crew emails live only in the deployed Code.gs, not here.
+CLAUDE_CODE_HANDOFF.md
+CLAUDE_CODE_UPDATE_*.md
+DEPLOY_NEXT_STEPS.md
+files.zip
+.claude/
