@@ -119,8 +119,12 @@ function getAppData_(user) {
       return { id: String(r.ID), text: String(r.Text), category: String(r.Category || 'Film'), createdAt: String(r.CreatedAt || '') };
     });
   }
-  if (user.role === 'crew') {
-    tasks = tasks.filter(function(t){ return t.AssignedTo === user.name; });
+  // Per-person task view: everyone except the owner sees only their own tasks.
+  // Crew also see tasks assigned to the generic "Crew". Tracy (work) sees only her own.
+  if (user.role !== 'owner') {
+    tasks = tasks.filter(function(t){
+      return t.AssignedTo === user.name || (user.role === 'crew' && t.AssignedTo === 'Crew');
+    });
   }
   return { user: user, projects: projects, tasks: tasks, shopping: shopping, schedule: schedule, personal: personal, ideas: ideas, people: people, voiceInbox: voiceInbox, tasksArchive: tasksArchive, trades: TRADES };
 }

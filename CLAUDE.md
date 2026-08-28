@@ -86,7 +86,7 @@ To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
 - Deleting a task/schedule entry **archives** the row (to `TASKS_ARCHIVE` /
   `SCHEDULE_ARCHIVE`) before removing — nothing is hard-deleted.
 
-## Current feature status (as of 2026-08-03)
+## Current feature status (as of 2026-08-24)
 
 **Live (frontend pushed + backend deployed):**
 - Task detail page: description (editable), notes (editable, renders an "Open
@@ -99,15 +99,35 @@ To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
   CREATIVE/PEOPLE) pre-selects the destination. Frontend-only (reuses add-actions).
 - Shopping, projects, people CRM, personal checklist, creative ideas.
 
-**Built + pushed but BACKEND NOT YET DEPLOYED — assignable subs:**
-- Frontend is live: assignee pickers draw from crew + Sub/Vendor people; task detail
-  has a **Reassign** control; People tab shows/sets a person **Type**
-  (Crew/Sub/Vendor/Client/Contact) + trade.
-- **Pending to finish it:** (1) run `addPeopleType.gs` once (adds the `Type` column
-  to PEOPLE, pre-tags Arnold=Sub/Electrician, Josh Burleson & Mauro Rodriguez=Sub);
-  (2) redeploy `Code_final.gs` (adds `updateTaskAssignee`, `updatePersonType`,
-  `addPerson` type param). Until then those actions return "Unknown action" and the
-  dropdowns show only the 4 crew.
+**Assignable subs — LIVE (deployed 2026-08-06).** People carry a `Type`
+(Crew/Sub/Vendor/Client/Contact); assignee pickers = crew + Sub/Vendor people; task
+detail has a **Reassign** control; People tab sets Type + trade. Backend has
+`updateTaskAssignee`, `updatePersonType`, `addPerson` type. Tagged: Arnold=Sub/
+Electrician, Josh Burleson & Mauro=Sub, Christian/Mitchell/Eric=Crew.
+
+**Per-person task view — CODE DONE, PENDING REDEPLOY (2026-08-24).** In `getAppData_`,
+non-owner roles are filtered to their own tasks: crew (Christian/Mitchell) see tasks
+where `AssignedTo == their name` **or** `AssignedTo == "Crew"`; Tracy (`work`) sees only
+her own. **Redeploy `Code_final.gs` to activate.** (Before this, crew were already
+filtered by name; Tracy incorrectly saw all tasks.)
+
+**Data:** synced through 2026-08-24 (V15). **MAC_PERSONAL was deduped 72 -> 18 on
+2026-08-24** (an append bug had repeated habit rows, e.g. "Nina Day" x7; consolidated
+via `savePersonalItems`). `VOICE_INBOX` is currently empty.
+
+## Sheet tabs — canonical vs archive vs stale (audited 2026-08-24)
+
+12 tabs. Know the difference before touching any:
+- **TASKS** (~162 rows) = the ONE canonical task list; the app reads only this. Statuses
+  are current (mirrors/address/extinguishers = DONE).
+- **TASKS_ARCHIVE / SCHEDULE_ARCHIVE** = the delete-with-archive feature (soft-deleted
+  rows carry `DeletedAt`/`DeletedReason`). **Keep them** — not duplicates.
+- **TASKS_BACKUP_&lt;stamp&gt;** (~121 rows, Status=NEW, old title-case project names like
+  "Terrible Wine") = a STALE Aug-3 pre-cleanup snapshot the app never reads. **Being
+  removed** via `removeStaleBackup.gs` (run once). If anyone reports "two task lists,"
+  this leftover backup is the cause.
+- Full set: PROJECTS, TASKS, SCHEDULE, SHOPPING, PEOPLE, VOICE_INBOX, MAC_PERSONAL,
+  MAC_IDEAS, LIST, TASKS_ARCHIVE, SCHEDULE_ARCHIVE, TASKS_BACKUP (to delete).
 
 ## Operational context (drives coordination)
 
@@ -126,9 +146,14 @@ To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
 
 ## Pending work / roadmap
 
-1. **Deploy assignable subs** — the one thing blocking full functionality (run
-   `addPeopleType.gs` + redeploy `Code_final.gs`). Then tag remaining subs in-app.
-2. **AI-assisted triage + connector** — the big one. Goal: Mac tells Claude
+**Immediate — from the 2026-08-24 audit/cleanup (do these):**
+- **Redeploy `Code_final.gs`** → activates the per-person task filter (Tracy sees her 7;
+  crew see own + "Crew"). Deploy > Manage deployments > Edit > New version.
+- **Run `removeStaleBackup.gs` once** → deletes the stale `TASKS_BACKUP` tab (run
+  `listTabs()` first to eyeball, then `removeStaleBackup()`), then delete the file.
+
+**Roadmap:**
+1. **AI-assisted triage + connector** — the big one. Goal: Mac tells Claude
    ("Arnold's guys no-showed at bee-caves, slide it") and Claude proposes the shifts
    + conflicts before touching anything. Preferred delivery: a **connector (MCP)**
    wrapping this API so it works from any Claude chat (needs a small hosted server).
@@ -143,8 +168,8 @@ To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
 - `index.html` — the frontend (live on GitHub Pages).
 - `Code_final.gs` — backend source, **tokens/emails REDACTED**. Restore real values
   before deploying.
-- `createScheduleTab.gs`, `cleanupData.gs`, `addPeopleType.gs` — one-time
-  migration/seed scripts (run once in Apps Script, then delete).
+- `createScheduleTab.gs`, `cleanupData.gs`, `addPeopleType.gs`, `removeStaleBackup.gs`
+  — one-time migration/seed/cleanup scripts (run once in Apps Script, then delete).
 - `.gitignore` — keeps sensitive/local files out of this public repo.
 
 Kept **local, not committed** (sensitive): `CLAUDE_CODE_HANDOFF.md`,
