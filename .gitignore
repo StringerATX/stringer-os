@@ -5,3 +5,10 @@ CLAUDE_CODE_UPDATE_*.md
 DEPLOY_NEXT_STEPS.md
 files.zip
 .claude/
+
+# One-time Aug 31 2026 ops-sync artifacts. Kept local: the payloads carry Mac's
+# personal checklist (health items) and the task labels carry medical/financial
+# detail. This repo is public - do not commit these.
+sync_aug31.sh
+ideas_aug31.json
+personal_aug31.json

@@ -111,9 +111,13 @@ where `AssignedTo == their name` **or** `AssignedTo == "Crew"`; Tracy (`work`) s
 her own. **Redeploy `Code_final.gs` to activate.** (Before this, crew were already
 filtered by name; Tracy incorrectly saw all tasks.)
 
-**Data:** synced through 2026-08-24 (V15). **MAC_PERSONAL was deduped 72 -> 18 on
-2026-08-24** (an append bug had repeated habit rows, e.g. "Nina Day" x7; consolidated
-via `savePersonalItems`). `VOICE_INBOX` is currently empty.
+**Data:** synced through 2026-08-31 (ops chat "Hazel Jones"). **MAC_PERSONAL was
+deduped 72 -> 18 on 2026-08-24** (an append bug had repeated habit rows, e.g. "Nina
+Day" x7; consolidated via `savePersonalItems`), then **18 -> 17 on 2026-08-31** when
+the dead Erin Breaux row `p7` was dropped (she is no longer engaged; JoAnne McIntosh
+handles tax now). TASKS went 166 -> 164 on 2026-08-31: 6 rows flipped to DONE from
+the ops chat and 2 duplicate Tracy rows were deduped into `TASKS_ARCHIVE`.
+`VOICE_INBOX` is currently empty.
 
 ## Sheet tabs — canonical vs archive vs stale (audited 2026-08-24)
 
@@ -128,6 +132,27 @@ via `savePersonalItems`). `VOICE_INBOX` is currently empty.
   this leftover backup is the cause.
 - Full set: PROJECTS, TASKS, SCHEDULE, SHOPPING, PEOPLE, VOICE_INBOX, MAC_PERSONAL,
   MAC_IDEAS, LIST, TASKS_ARCHIVE, SCHEDULE_ARCHIVE, TASKS_BACKUP (to delete).
+
+## Source of truth
+
+- **The ops chat is named "Hazel Jones."** It is the **source of truth for task
+  status.** The sheet is the database; Hazel is where status actually changes first.
+  When they disagree, Hazel wins — reconcile the sheet to the chat, not the reverse.
+  Hazel also authored `idea-vault-spark-lines.md` (Drive, Writing folder), which
+  holds the full descriptions behind every `MAC_IDEAS` title.
+
+## MAC_IDEAS (idea vault)
+
+- `MAC_IDEAS` is **titles only** — 28 entries as of 2026-08-31 (was 12). Full
+  descriptions live in **`idea-vault-spark-lines.md`** in Drive, not in the sheet.
+- Categories in use: `Film` (8), `Essay / TikTok` (8), `Art` (6),
+  `Infrastructure` (2), `Venture` (3), `Music` (1). **`Venture` replaced the old
+  `Business`** category. The filter chips **are** hardcoded in `index.html` as the
+  `IC` array (~line 199) — adding a category to the sheet without adding it there
+  leaves those ideas visible only under the "All" chip. `IC` was updated 2026-08-31.
+- IDs are `i1`..`i28`, `CreatedAt` is plain `YYYY-MM-DD`. The `saveIdeas` action
+  takes a JSON array in the `ideas` param and **rewrites the whole tab**
+  (`clearContents` + re-append header) — there is no per-row idea edit.
 
 ## Operational context (drives coordination)
 
