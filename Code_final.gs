@@ -60,6 +60,7 @@ function doGet(e) {
 // ─── ACTION ROUTER ───────────────────────────────────────────
 function handleAction_(action, p, user) {
   if (action === 'updateTaskStatus')     return updateTaskStatus(p.id, p.status);
+  if (action === 'updateTaskPriority')   return updateTaskPriority(p.id, p.priority);
   if (action === 'toggleShoppingStatus') return toggleShoppingStatus(p.id);
   if (action === 'updateTaskNotes')      return updateTaskNotes(p.id, p.notes);
   if (action === 'updateTaskDescription') return updateTaskDescription(p.id, p.description);
@@ -224,6 +225,22 @@ function updateTaskStatus(id, status) {
   return {error:'not found'};
 }
 
+
+// Set a task's Priority (col 6). Enum is exact-case: HIGH / MEDIUM / LOW.
+function updateTaskPriority(id, priority) {
+  var ok = ['HIGH','MEDIUM','LOW'];
+  if (ok.indexOf(String(priority)) < 0) return {error:'bad priority: ' + priority};
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName('TASKS');
+  var v = sheet.getDataRange().getValues();
+  for (var i = 1; i < v.length; i++) {
+    if (String(v[i][0]) === String(id)) {
+      sheet.getRange(i+1, 6).setValue(priority);
+      return {success:true};
+    }
+  }
+  return {error:'not found'};
+}
+
 function updateTaskNotes(id, notes) {
   var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName('TASKS');
   var v = sheet.getDataRange().getValues();
@@ -323,12 +340,34 @@ function toggleShoppingStatus(id) {
 }
 
 // ─── PERSONAL ────────────────────────────────────────────────
+// Whole-tab rewrite. Two hardenings after the 2026-09-02 corruption (41 rows,
+// 14 distinct ids, 3 rows lost): take a document lock so concurrent toggles
+// cannot interleave, and write the block in ONE setValues call instead of
+// clearContents + N appendRow (appendRow races against a concurrent clear).
 function savePersonalItems(items) {
-  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName('MAC_PERSONAL');
-  sheet.clearContents();
-  sheet.appendRow(['ID','Description','Done','Category','CreatedAt']);
-  items.forEach(function(i) { sheet.appendRow([i.id, i.description, i.done ? 'TRUE' : 'FALSE', i.category||'daily', i.createdAt||today_()]); });
-  return {success:true};
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(20000)) return {error:'busy, try again'};
+  try {
+    var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName('MAC_PERSONAL');
+    // Dedupe by id, last write wins - defence in depth against a bad payload.
+    var seen = {}, clean = [];
+    items.forEach(function(i) {
+      if (!i || !i.id) return;
+      var key = String(i.id);
+      if (seen[key] === undefined) { seen[key] = clean.length; clean.push(i); }
+      else { clean[seen[key]] = i; }
+    });
+    var rows = [['ID','Description','Done','Category','CreatedAt']];
+    clean.forEach(function(i) {
+      rows.push([i.id, i.description, i.done ? 'TRUE' : 'FALSE', i.category||'daily', i.createdAt||today_()]);
+    });
+    sheet.clearContents();
+    sheet.getRange(1, 1, rows.length, 5).setValues(rows);
+    SpreadsheetApp.flush();
+    return {success:true, rows: clean.length};
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ─── IDEAS ───────────────────────────────────────────────────

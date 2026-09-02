@@ -52,7 +52,7 @@ format (it would make them guessable).
 - **No `action`** → returns the full app data as JSON (`user, projects, tasks,
   shopping, schedule, personal, ideas, people, voiceInbox, tasksArchive, trades`).
 - **`&action=X&...params`** → a write. Actions currently supported:
-  `updateTaskStatus, updateTaskNotes, updateTaskDescription, deleteTask,
+  `updateTaskStatus, updateTaskPriority, updateTaskNotes, updateTaskDescription, deleteTask,
   restoreTask, updateTaskAssignee, toggleShoppingStatus, addTask, addShoppingItem,
   updateScheduleEntry, addScheduleEntry, deleteScheduleEntry, savePersonalItems,
   saveIdeas, addPerson, updateLastContact, updatePersonType, addVoiceEntry,
@@ -113,13 +113,49 @@ she sees **8 distinct tasks** (after the Aug 31 dedupe; an earlier note said 7).
 There is no UI filter control and none is needed — the filtering is server-side in
 `getAppData_`. Do not "fix" this by adding a client-side assignee filter.
 
-**Data:** synced through 2026-08-31 (ops chat "Hazel Jones"). **MAC_PERSONAL was
-deduped 72 -> 18 on 2026-08-24** (an append bug had repeated habit rows, e.g. "Nina
-Day" x7; consolidated via `savePersonalItems`), then **18 -> 17 on 2026-08-31** when
-the dead Erin Breaux row `p7` was dropped (she is no longer engaged; JoAnne McIntosh
-handles tax now). TASKS went 166 -> 164 on 2026-08-31: 6 rows flipped to DONE from
-the ops chat and 2 duplicate Tracy rows were deduped into `TASKS_ARCHIVE`.
+**Rhythm tab + editable Priority — frontend LIVE, backend PENDING DEPLOY (2026-09-02).**
+- **RHYTHM tab** (owner nav, between MAC and STRINGER) renders the MAC_PERSONAL daily
+  rhythm as a time-ordered day. MAC is now "Responsibilities" and shows only the
+  non-rhythm rows. A row counts as rhythm if its id starts with `pd` or its text names
+  a time. Hours are parsed from the text; ones only implied ("morning", "after
+  dinner") are inferred and shown with a `~`, and rows with no time at all go to an
+  **Anytime** block rather than being given a made-up hour.
+- **Priority is editable** in task detail, same button pattern as Status. This needed a
+  new backend action `updateTaskPriority` (writes TASKS col 6) — **redeploy
+  `Code_final.gs` as a New version to activate.** Until then the buttons revert and
+  alert; they do not silently fail.
+- **`savePersonalItems` hardened** in the same pending deploy — see the MAC_PERSONAL
+  corruption note below.
+- **Readability pass:** the two secondary greys were failing on the dark ground
+  (`#6b6860` ~3.5:1, `#3a3a36` ~1.7:1); now ~10:1 and ~6.3:1. Type scale raised
+  throughout (9->13, 11->14, 13->16px). Because the palette got lighter, white-on-colour
+  broke for the light badges — `onColor()` now picks dark or white per background.
+- **Desktop layout** is CSS-only: at >=900px the container widens (1180px, 1560px at
+  >=1360px) and `.pad` becomes an auto-fill grid. Cards opt *in* to columns; everything
+  else spans full width by default, so detail views cannot column-split.
+
+**Data:** synced through 2026-09-02. TASKS went 166 -> 164 on 2026-08-31 (6 rows
+flipped to DONE from the ops chat, 2 duplicate Tracy rows archived).
 `VOICE_INBOX` is currently empty.
+
+**MAC_PERSONAL corruption — root cause found and fixed 2026-09-02. READ THIS.**
+The tab has now been mass-deduped three times (72 -> 18 on 08-24, 18 -> 17 on 08-31,
+then **41 -> 15 on 09-02**). It was never a one-off: `savePersonalItems` did
+`clearContents()` followed by one `appendRow()` per item, with no lock. Every
+checkbox tap posts the whole array, so two taps in quick succession interleave and
+appends land against a half-cleared sheet. By 09-02 it held **41 rows across only 14
+distinct ids** (`pd5` x6, `pd1`/`pd3`/`pd4` x5) and had **destroyed three rows
+outright** — `pd7` Guitar practice, `pd9` Creative work or drawing, `pd12` Nina Day.
+Fix (in the pending deploy): take a `LockService` document lock and write the whole
+block in ONE `setValues` call; the frontend also collapses duplicates on read via
+`dedupePersonal()`, so a dirty sheet can no longer reach the UI. `saveIdeas` still
+has the same unhardened shape but is written far less often — harden it if
+MAC_IDEAS ever shows the same symptom.
+The 09-02 clean-up restored the 3 lost rows, dropped `p3` and `p4` (Jul 25 originals
+restated by the Jul 29 `pd*` set: `p3` reworded `pd1`, and `pd2` already contains
+"property loop"), and reset the 12 rhythm rows to not-done. **Current state: 15 rows
+— 12 rhythm (`pd*`) + 3 responsibilities (`p2`, `p5`, `p8`).** One detail was lost
+with `p4`: its "min 2x" target for the morning property loop is not in `pd2`.
 
 ## Sheet tabs — canonical vs archive (audited 2026-08-31)
 
@@ -173,24 +209,33 @@ the ops chat and 2 duplicate Tracy rows were deduped into `TASKS_ARCHIVE`.
 
 ## Pending work / roadmap
 
-**Immediate — the Aug 24 audit items are DONE (2026-08-28): the per-person filter is
-deployed and `removeStaleBackup.gs` has run.** One leftover: if
+**Immediate — redeploy `Code_final.gs` as a New version (2026-09-02).** Two changes
+are committed but NOT live: `updateTaskPriority` (Priority editing is inert without
+it — the buttons revert and alert) and the hardened `savePersonalItems` (lock +
+single `setValues`, which is what stops the MAC_PERSONAL corruption recurring).
+Deploy > Manage deployments > Edit > New version.
+
+**Leftover from the Aug 24 audit (both items themselves are DONE as of 08-28):** if
 `removeStaleBackup.gs` still exists as a file in the **Apps Script project**, delete
-it there — it is a one-time script and has served its purpose. (The copy in this
-repo is kept as a record, same as the other one-time scripts.)
+it there. The copy in this repo is kept as a record, like the other one-time scripts.
 
 **Roadmap:**
 1. **Rotate the owner token** — needs Mac present. Change the owner token string in
    the live `Code.gs` `TOKENS` map, **redeploy as a New version**, then update
    anywhere Mac's app bookmark embeds `?t=`. Crew/work tokens are unaffected unless
    rotated too. Do not do this without Mac, or he loses app access from his phone.
-2. **AI-assisted triage + connector** — the big one. Goal: Mac tells Claude
+2. **Rhythm items should reset each morning** — they are daily recurring by nature,
+   but nothing ever flips `done` back, so a stale August tick made the whole day read
+   as complete. The 09-02 clean-up reset them by hand. Needs a real mechanism: either
+   a dated last-completed column, or an Apps Script time trigger that clears `Done`
+   for `pd*` rows overnight. Until then they will silently go stale again.
+3. **AI-assisted triage + connector** — the big one. Goal: Mac tells Claude
    ("Arnold's guys no-showed at bee-caves, slide it") and Claude proposes the shifts
    + conflicts before touching anything. Preferred delivery: a **connector (MCP)**
    wrapping this API so it works from any Claude chat (needs a small hosted server).
    Optional in-app AI suggestions would need an Anthropic API key in Apps Script.
-3. **`updateProject` action** — so jurisdiction/other project fields can be set via API.
-4. **Per-user personal/creative tabs for crew** (independent).
+4. **`updateProject` action** — so jurisdiction/other project fields can be set via API.
+5. **Per-user personal/creative tabs for crew** (independent).
 - Follow-ups Mac owns: confirm Alex Sanchez's jurisdiction; check with Arnold whether
   the two bee-caves concrete pours can have a weekend gap.
 

@@ -12,3 +12,7 @@ files.zip
 sync_aug31.sh
 ideas_aug31.json
 personal_aug31.json
+
+# local render harness, never commit
+_test_local.html
+personal_sep02.json
