@@ -86,7 +86,7 @@ To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
 - Deleting a task/schedule entry **archives** the row (to `TASKS_ARCHIVE` /
   `SCHEDULE_ARCHIVE`) before removing — nothing is hard-deleted.
 
-## Current feature status (as of 2026-08-24)
+## Current feature status (as of 2026-08-31)
 
 **Live (frontend pushed + backend deployed):**
 - Task detail page: description (editable), notes (editable, renders an "Open
@@ -105,11 +105,13 @@ detail has a **Reassign** control; People tab sets Type + trade. Backend has
 `updateTaskAssignee`, `updatePersonType`, `addPerson` type. Tagged: Arnold=Sub/
 Electrician, Josh Burleson & Mauro=Sub, Christian/Mitchell/Eric=Crew.
 
-**Per-person task view — CODE DONE, PENDING REDEPLOY (2026-08-24).** In `getAppData_`,
-non-owner roles are filtered to their own tasks: crew (Christian/Mitchell) see tasks
-where `AssignedTo == their name` **or** `AssignedTo == "Crew"`; Tracy (`work`) sees only
-her own. **Redeploy `Code_final.gs` to activate.** (Before this, crew were already
-filtered by name; Tracy incorrectly saw all tasks.)
+**Per-person task view — LIVE (deployed 2026-08-28).** In `getAppData_`, every
+non-owner role is filtered to their own tasks: crew (Christian/Mitchell) see tasks
+where `AssignedTo == their name` **or** `AssignedTo == "Crew"`; Tracy (`work`) sees
+only her own. Deployed as a new version on 2026-08-28 and confirmed with Tracy —
+she sees **8 distinct tasks** (after the Aug 31 dedupe; an earlier note said 7).
+There is no UI filter control and none is needed — the filtering is server-side in
+`getAppData_`. Do not "fix" this by adding a client-side assignee filter.
 
 **Data:** synced through 2026-08-31 (ops chat "Hazel Jones"). **MAC_PERSONAL was
 deduped 72 -> 18 on 2026-08-24** (an append bug had repeated habit rows, e.g. "Nina
@@ -119,19 +121,19 @@ handles tax now). TASKS went 166 -> 164 on 2026-08-31: 6 rows flipped to DONE fr
 the ops chat and 2 duplicate Tracy rows were deduped into `TASKS_ARCHIVE`.
 `VOICE_INBOX` is currently empty.
 
-## Sheet tabs — canonical vs archive vs stale (audited 2026-08-24)
+## Sheet tabs — canonical vs archive (audited 2026-08-31)
 
-12 tabs. Know the difference before touching any:
-- **TASKS** (~162 rows) = the ONE canonical task list; the app reads only this. Statuses
-  are current (mirrors/address/extinguishers = DONE).
+11 tabs. Know the difference before touching any:
+- **TASKS** (164 rows as of 2026-08-31) = the ONE canonical task list; the app reads
+  only this.
 - **TASKS_ARCHIVE / SCHEDULE_ARCHIVE** = the delete-with-archive feature (soft-deleted
   rows carry `DeletedAt`/`DeletedReason`). **Keep them** — not duplicates.
-- **TASKS_BACKUP_&lt;stamp&gt;** (~121 rows, Status=NEW, old title-case project names like
-  "Terrible Wine") = a STALE Aug-3 pre-cleanup snapshot the app never reads. **Being
-  removed** via `removeStaleBackup.gs` (run once). If anyone reports "two task lists,"
-  this leftover backup is the cause.
+- **`TASKS_BACKUP_<stamp>` is GONE.** That stale Aug-3 pre-cleanup snapshot was
+  deleted 2026-08-28 via `removeStaleBackup.gs` (`listTabs()` verified first), and
+  its absence was re-confirmed against the sheet on 2026-08-31. If anyone ever
+  reports "two task lists" again, a leftover backup tab is the thing to look for.
 - Full set: PROJECTS, TASKS, SCHEDULE, SHOPPING, PEOPLE, VOICE_INBOX, MAC_PERSONAL,
-  MAC_IDEAS, LIST, TASKS_ARCHIVE, SCHEDULE_ARCHIVE, TASKS_BACKUP (to delete).
+  MAC_IDEAS, LIST, TASKS_ARCHIVE, SCHEDULE_ARCHIVE.
 
 ## Source of truth
 
@@ -171,14 +173,18 @@ the ops chat and 2 duplicate Tracy rows were deduped into `TASKS_ARCHIVE`.
 
 ## Pending work / roadmap
 
-**Immediate — from the 2026-08-24 audit/cleanup (do these):**
-- **Redeploy `Code_final.gs`** → activates the per-person task filter (Tracy sees her 7;
-  crew see own + "Crew"). Deploy > Manage deployments > Edit > New version.
-- **Run `removeStaleBackup.gs` once** → deletes the stale `TASKS_BACKUP` tab (run
-  `listTabs()` first to eyeball, then `removeStaleBackup()`), then delete the file.
+**Immediate — the Aug 24 audit items are DONE (2026-08-28): the per-person filter is
+deployed and `removeStaleBackup.gs` has run.** One leftover: if
+`removeStaleBackup.gs` still exists as a file in the **Apps Script project**, delete
+it there — it is a one-time script and has served its purpose. (The copy in this
+repo is kept as a record, same as the other one-time scripts.)
 
 **Roadmap:**
-1. **AI-assisted triage + connector** — the big one. Goal: Mac tells Claude
+1. **Rotate the owner token** — needs Mac present. Change the owner token string in
+   the live `Code.gs` `TOKENS` map, **redeploy as a New version**, then update
+   anywhere Mac's app bookmark embeds `?t=`. Crew/work tokens are unaffected unless
+   rotated too. Do not do this without Mac, or he loses app access from his phone.
+2. **AI-assisted triage + connector** — the big one. Goal: Mac tells Claude
    ("Arnold's guys no-showed at bee-caves, slide it") and Claude proposes the shifts
    + conflicts before touching anything. Preferred delivery: a **connector (MCP)**
    wrapping this API so it works from any Claude chat (needs a small hosted server).
