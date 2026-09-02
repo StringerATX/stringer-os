@@ -130,9 +130,16 @@ There is no UI filter control and none is needed — the filtering is server-sid
   (`#6b6860` ~3.5:1, `#3a3a36` ~1.7:1); now ~10:1 and ~6.3:1. Type scale raised
   throughout (9->13, 11->14, 13->16px). Because the palette got lighter, white-on-colour
   broke for the light badges — `onColor()` now picks dark or white per background.
-- **Desktop layout** is CSS-only: at >=900px the container widens (1180px, 1560px at
-  >=1360px) and `.pad` becomes an auto-fill grid. Cards opt *in* to columns; everything
-  else spans full width by default, so detail views cannot column-split.
+- **Desktop layout** is CSS-only: at **>=720px** `body` drops its max-width entirely
+  (`max-width:none`) and `.pad` becomes an auto-fill grid — 320px min columns, 400px
+  above 1600px. Cards opt *in* to columns; everything else spans full width by
+  default, so detail views cannot column-split. Line length is capped at 900px on
+  `.td-desc`/`.td-notes` only, where long lines actually hurt.
+  **Do not raise the 720px breakpoint.** It shipped at 900px on 09-02 and did not
+  work: a browser window that is not maximised, or a laptop at 150% Windows display
+  scaling, reports under 900px of CSS width even on a large monitor (measured: 887px),
+  so those machines silently kept the 480px phone column. There is no max-width above
+  the breakpoint on purpose — on a monitor this fills the screen like a spreadsheet.
 
 **Data:** synced through 2026-09-02. TASKS went 166 -> 164 on 2026-08-31 (6 rows
 flipped to DONE from the ops chat, 2 duplicate Tracy rows archived).

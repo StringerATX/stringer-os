@@ -168,22 +168,36 @@ button{font-family:inherit;cursor:pointer;}input,select,textarea{font-family:inh
 .rhblock{margin-bottom:6px;}
 .rhnote{font-size:13px;color:#9a9384;line-height:1.5;padding:10px 0 2px;}
 
-/* ─── Desktop / wide layout ─── */
-@media (min-width:900px){
-  body{max-width:1180px;font-size:17px;}
-  .bnav,.crewfoot,.modal{max-width:1180px;}
-  .pad{padding:22px 24px 0;display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:0 30px;align-items:start;}
+/* ─── Wide / desktop layout ───────────────────────────────────────────────
+   Breakpoint is deliberately low (720px). A browser window that is not
+   maximised, or a laptop running Windows display scaling at 150%, reports
+   well under 900px of CSS width even on a large monitor - at 900px those
+   machines kept getting the 480px phone column. Measured case: 887px.
+   There is no max-width above the breakpoint on purpose: on a monitor this
+   should fill the screen the way a spreadsheet does, not sit in a letterbox.
+   Line length is capped on the detail views only, where it actually hurts. */
+@media (min-width:720px){
+  body{max-width:none;width:100%;font-size:17px;}
+  .bnav,.crewfoot{max-width:none;}
+  .modal{max-width:720px;}
+  .pad{padding:20px 24px 0;display:grid;
+       grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+       gap:0 28px;align-items:start;}
+  /* Default is full-width span; cards opt IN to the columns. Keeps detail
+     views from column-splitting when new markup is added later. */
   .pad > *{grid-column:1/-1;}
   .pad > .titem,.pad > .pcard,.pad > .mitem,.pad > .iitem,
   .pad > .person-item,.pad > .shitem,.pad > .vi-item{grid-column:auto;}
   .header{padding:15px 24px;}
   .subnav{padding:0 24px;}
   .nbtn{padding:13px 0 15px;}
+  .td-desc,.td-descedit,.td-notes{max-width:900px;}
   .td-notes{min-height:150px;}
 }
-@media (min-width:1360px){
-  body{max-width:1560px;}
-  .bnav,.crewfoot,.modal{max-width:1560px;}
+@media (min-width:1600px){
+  .pad{padding:24px 40px 0;gap:0 36px;
+       grid-template-columns:repeat(auto-fill,minmax(400px,1fr));}
+  .header,.subnav{padding-left:40px;padding-right:40px;}
 }
 .crewfoot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:#1a1a18;border-top:1px solid #3d3831;padding:10px 16px 14px;text-align:center;font-size:13px;color:#9a9384;letter-spacing:.15em;text-transform:uppercase;}
 </style>
