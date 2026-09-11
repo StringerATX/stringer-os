@@ -141,9 +141,11 @@ There is no UI filter control and none is needed — the filtering is server-sid
   so those machines silently kept the 480px phone column. There is no max-width above
   the breakpoint on purpose — on a monitor this fills the screen like a spreadsheet.
 
-**Data:** synced through 2026-09-02. TASKS went 166 -> 164 on 2026-08-31 (6 rows
-flipped to DONE from the ops chat, 2 duplicate Tracy rows archived).
-`VOICE_INBOX` is currently empty.
+**Data:** synced through 2026-09-10 (Thu-night reconcile via the live API: new
+`aurora-bakery` project, Terrible Wine CO issued 9/8 + soft open Mon 9/14, bee-caves
+pole/draw status, Metro, Rosette, Park North, admin items). TASKS went 166 -> 164 on
+2026-08-31 (6 rows flipped to DONE from the ops chat, 2 duplicate Tracy rows
+archived). `VOICE_INBOX` is currently empty.
 
 **MAC_PERSONAL corruption — root cause found and fixed 2026-09-02. READ THIS.**
 The tab has now been mass-deduped three times (72 -> 18 on 08-24, 18 -> 17 on 08-31,
@@ -245,6 +247,14 @@ it there. The copy in this repo is kept as a record, like the other one-time scr
 5. **Per-user personal/creative tabs for crew** (independent).
 - Follow-ups Mac owns: confirm Alex Sanchez's jurisdiction; check with Arnold whether
   the two bee-caves concrete pours can have a weekend gap.
+
+## Machines / local folders
+
+- Desktop machine has two project folders touching Stringer OS; census and cleanup owed
+  next desktop session (9/10/26).
+- Laptop folder `~/OneDrive/Desktop/stringer-os` is **not a git clone** (no `.git`; its
+  `index.html` is the Aug 3 build). Confirmed 9/10/26. Re-clone before any local edits
+  there; the API URL it holds is still the live one.
 
 ## Files in this repo
 
