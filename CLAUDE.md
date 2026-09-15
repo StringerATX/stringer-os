@@ -56,7 +56,7 @@ format (it would make them guessable).
   restoreTask, updateTaskAssignee, toggleShoppingStatus, addTask, addShoppingItem,
   updateScheduleEntry, addScheduleEntry, deleteScheduleEntry, savePersonalItems,
   saveIdeas, addPerson, updateLastContact, updatePersonType, addVoiceEntry,
-  processVoiceEntry, addProject`.
+  processVoiceEntry, addProject, archiveDoneTasks` (owner only, `days` param, default 30).
 
 To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
 --data-urlencode "t=$TOKEN" --data-urlencode "action=addTask" ...`).
@@ -141,7 +141,8 @@ There is no UI filter control and none is needed — the filtering is server-sid
   so those machines silently kept the 480px phone column. There is no max-width above
   the breakpoint on purpose — on a monitor this fills the screen like a spreadsheet.
 
-**Data:** synced through 2026-09-15 (Tue-night reconcile: Terrible Wine opened 9/14,
+**Data:** synced through 2026-09-15 (housekeeping pass: archive sweep 212 -> 133 tasks,
+shelving install / TW full clean / Lori 9/12 flipped DONE; Tue-night reconcile: Terrible Wine opened 9/14,
 public Fri 9/18; Aurora framing day; MAC_PERSONAL regimen rewritten to pd13-pd22).
 Earlier: 2026-09-10 (Thu-night reconcile via the live API: new
 `aurora-bakery` project, Terrible Wine CO issued 9/8 + soft open Mon 9/14, bee-caves
@@ -233,11 +234,38 @@ it there. The copy in this repo is kept as a record, like the other one-time scr
 **Still owed (as of 2026-09-15, both need a desktop day):**
 - Desktop two-folder census and cleanup (see Machines / local folders).
 - Apps Script backend redeploy of `Code_final.gs` as a New version. Until then
-  `updateTaskPriority` is inert (probe returns "Unknown action") and
-  `savePersonalItems` is still the unhardened version. Sessions on the laptop work
+  `updateTaskPriority` is inert (probe returns "Unknown action"),
+  `savePersonalItems` is still the unhardened version, and the 2026-09-15 additions
+  (`CompletedAt` stamp in `updateTaskStatus`, `archiveDoneTasks` action) are not live.
+  **A paste-ready copy with the real tokens restored is on the laptop at
+  `~/OneDrive/Desktop/stringer-os/Code_DEPLOY_LOCAL.gs`** (gitignored). Steps: open the
+  Sheet > Extensions > Apps Script > Code.gs > select all > paste that file > Save >
+  Deploy > Manage deployments > pencil > Version: New version > Deploy. Verify with
+  `action=updateTaskPriority&id=__probe__&priority=HIGH` returning `not found` (not
+  "Unknown action"), then edit a Priority in the app and refresh. Sessions on the laptop work
   around both: set Priority at addTask time, and rewrite MAC_PERSONAL only from a
   single script call with a backup taken first.
 - Overnight rhythm auto-reset is still roadmap #2 below.
+
+**Recurring monthly step: archive sweep (manual trigger for now; automation candidate
+later, e.g. an Apps Script time trigger on the 1st).** Move DONE tasks completed 30+
+days ago from TASKS to TASKS_ARCHIVE. Nothing is deleted: `archiveRow_` copies every
+column plus `DeletedAt` and a `DeletedReason` naming the sweep and the completion date,
+and the row stays readable in the Archive tab and restorable via "Recently deleted".
+- After the backend redeploy: one call does it:
+  `curl -sSL -G "$EXEC" --data-urlencode t=$TOKEN --data-urlencode action=archiveDoneTasks --data-urlencode days=30`
+  It uses the `CompletedAt` column (col 13, auto-created and stamped by
+  `updateTaskStatus` from that deploy on). Rows with no `CompletedAt` are skipped and
+  reported as `skippedNoDate`; check that number the first few months.
+- **First sweep ran 2026-09-15 from the laptop, before `CompletedAt` existed**, so it
+  used a proxy: DONE as of the 9/10 snapshot AND `CreatedAt` <= 2026-08-16 AND no
+  date after Aug 15 in the text/notes. 79 rows moved via `deleteTask`, reason
+  "Archive sweep 2026-09-15: ...". TASKS 212 -> 133. Six DONE rows were deliberately
+  kept because their text dated them later (bar top, FIRE inspection, TCO, the Aug 17-19
+  bee-caves items). Side effect: "Recently deleted" on the Today view shows sweep rows
+  (newest 30) until real deletes push them down.
+- Legacy DONE rows that never get a `CompletedAt` (the ones done before the deploy) will
+  need one more proxy sweep or a hand-entered date; after that the column carries it.
 
 **Roadmap:**
 1. **Rotate the owner token** — needs Mac present. Change the owner token string in

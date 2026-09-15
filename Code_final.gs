@@ -65,6 +65,7 @@ function handleAction_(action, p, user) {
   if (action === 'updateTaskNotes')      return updateTaskNotes(p.id, p.notes);
   if (action === 'updateTaskDescription') return updateTaskDescription(p.id, p.description);
   if (action === 'deleteTask')           return deleteTask(p.id, p.reason || '');
+  if (action === 'archiveDoneTasks')     return archiveDoneTasks(p.days, user);
   if (action === 'restoreTask')          return restoreTask(p.id);
   if (action === 'updateScheduleEntry')  return updateScheduleEntry(p.id, { date: p.date, person: p.person, startTime: p.startTime, endTime: p.endTime, location: p.location, project: p.project, notes: p.notes, status: p.status });
   if (action === 'addScheduleEntry')     return addScheduleEntry({ date: p.date, person: p.person, startTime: p.startTime, endTime: p.endTime, location: p.location, project: p.project, notes: p.notes });
@@ -216,13 +217,52 @@ function addTask(task) {
 function updateTaskStatus(id, status) {
   var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName('TASKS');
   var v = sheet.getDataRange().getValues();
+  // CompletedAt (added 2026-09-15): stamped when a task goes DONE, cleared when it is
+  // reopened. Feeds the monthly archive sweep. Column is created on first use.
+  var doneCol = v[0].indexOf('CompletedAt');
+  if (doneCol < 0) { doneCol = v[0].length; sheet.getRange(1, doneCol+1).setValue('CompletedAt'); }
   for (var i = 1; i < v.length; i++) {
     if (String(v[i][0]) === String(id)) {
       sheet.getRange(i+1, 7).setValue(status);
+      if (status === 'DONE') {
+        if (!v[i][doneCol]) sheet.getRange(i+1, doneCol+1).setNumberFormat('@').setValue(today_());
+      } else {
+        sheet.getRange(i+1, doneCol+1).setValue('');
+      }
       return {success:true};
     }
   }
   return {error:'not found'};
+}
+
+// Monthly archive sweep (owner only). Moves DONE tasks whose CompletedAt is older
+// than `days` (default 30) to TASKS_ARCHIVE via archiveRow_, so every field is kept
+// and the row stays readable/restorable. Rows with no CompletedAt are left in place
+// and counted in skippedNoDate. Nothing is hard-deleted.
+//   curl -sSL -G "$EXEC" --data-urlencode t=$TOKEN --data-urlencode action=archiveDoneTasks --data-urlencode days=30
+function archiveDoneTasks(days, user) {
+  if (!user || user.role !== 'owner') return {error:'owner only'};
+  days = parseInt(days, 10) || 30;
+  var ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+  var sheet = ss.getSheetByName('TASKS');
+  var v = sheet.getDataRange().getValues();
+  var header = v[0];
+  var doneCol = header.indexOf('CompletedAt');
+  if (doneCol < 0) return {error:'no CompletedAt column yet'};
+  var cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days);
+  var moved = 0, skipped = 0;
+  for (var i = v.length - 1; i >= 1; i--) { // bottom-up so deletes never shift unprocessed rows
+    if (String(v[i][6]) !== 'DONE') continue;
+    var stamp = v[i][doneCol];
+    if (!stamp) { skipped++; continue; }
+    var when = (stamp instanceof Date) ? stamp : new Date(String(stamp));
+    if (isNaN(when.getTime()) || when > cutoff) continue;
+    var label = (stamp instanceof Date) ? Utilities.formatDate(stamp, Session.getScriptTimeZone(), 'yyyy-MM-dd') : String(stamp);
+    archiveRow_(ss, 'TASKS_ARCHIVE', header, v[i], 'Archive sweep: DONE ' + days + '+ days (completed ' + label + ')');
+    sheet.deleteRow(i+1);
+    moved++;
+  }
+  return {success:true, moved:moved, skippedNoDate:skipped, days:days};
 }
 
 

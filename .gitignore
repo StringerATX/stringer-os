@@ -16,3 +16,6 @@ personal_aug31.json
 # local render harness, never commit
 _test_local.html
 personal_sep02.json
+
+# Paste-ready backend with REAL tokens restored (built locally, never commit)
+Code_DEPLOY_LOCAL.gs
