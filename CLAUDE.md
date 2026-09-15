@@ -141,7 +141,9 @@ There is no UI filter control and none is needed — the filtering is server-sid
   so those machines silently kept the 480px phone column. There is no max-width above
   the breakpoint on purpose — on a monitor this fills the screen like a spreadsheet.
 
-**Data:** synced through 2026-09-10 (Thu-night reconcile via the live API: new
+**Data:** synced through 2026-09-15 (Tue-night reconcile: Terrible Wine opened 9/14,
+public Fri 9/18; Aurora framing day; MAC_PERSONAL regimen rewritten to pd13-pd22).
+Earlier: 2026-09-10 (Thu-night reconcile via the live API: new
 `aurora-bakery` project, Terrible Wine CO issued 9/8 + soft open Mon 9/14, bee-caves
 pole/draw status, Metro, Rosette, Park North, admin items). TASKS went 166 -> 164 on
 2026-08-31 (6 rows flipped to DONE from the ops chat, 2 duplicate Tracy rows
@@ -227,6 +229,15 @@ Deploy > Manage deployments > Edit > New version.
 **Leftover from the Aug 24 audit (both items themselves are DONE as of 08-28):** if
 `removeStaleBackup.gs` still exists as a file in the **Apps Script project**, delete
 it there. The copy in this repo is kept as a record, like the other one-time scripts.
+
+**Still owed (as of 2026-09-15, both need a desktop day):**
+- Desktop two-folder census and cleanup (see Machines / local folders).
+- Apps Script backend redeploy of `Code_final.gs` as a New version. Until then
+  `updateTaskPriority` is inert (probe returns "Unknown action") and
+  `savePersonalItems` is still the unhardened version. Sessions on the laptop work
+  around both: set Priority at addTask time, and rewrite MAC_PERSONAL only from a
+  single script call with a backup taken first.
+- Overnight rhythm auto-reset is still roadmap #2 below.
 
 **Roadmap:**
 1. **Rotate the owner token** — needs Mac present. Change the owner token string in
