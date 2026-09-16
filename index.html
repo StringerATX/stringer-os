@@ -316,7 +316,7 @@ function render(){
     var tp=S.tasks.find(function(x){return String(x.ID)===String(S.taskPage);});
     var tproj=tp?S.projects.find(function(p){return String(p.ID)===String(tp.Project);}):null;
     hdr.className='header detail';
-    hdr.innerHTML='<button class="hback" onclick="S.taskPage=null;render()">←</button><div class="hname project">'+(tproj?esc(String(tproj.Name)):'Task')+'</div>';
+    hdr.innerHTML='<button class="hback" onclick="closeTask()">←</button><div class="hname project">'+(tproj?esc(String(tproj.Name)):'Task')+'</div>';
   } else if(S.projectPage){
     var proj=S.projects.find(function(p){return p.ID===S.projectPage;});
     hdr.className='header detail';
@@ -744,7 +744,7 @@ function confirmDelTask(id){
   var el=document.getElementById('td-reason-'+id);
   var reason=el?el.value.trim():'';
   S.tasks=S.tasks.filter(function(x){return String(x.ID)!==String(id);});
-  S.taskPage=null;S.tdDel=false;render();
+  closeTask();
   apiCall({action:'deleteTask',id:id,reason:reason});
 }
 
@@ -904,7 +904,10 @@ function rPeople(){
 
 // ─── ACTIONS ─────────────────────────────────────────────────
 function openProject(id){S.projectPage=id;S.taskPage=null;S.tradeFilter='all';S.at=null;S.as=false;render();}
-function openTask(id){S.taskPage=id;S.et=null;S.tdDel=false;S.tdEditDesc=false;render();}
+// Remember where the list was scrolled so closing the detail page lands back on
+// the same spot - after a DONE, the next task sits where the finished one was.
+function openTask(id){S.listScroll=window.scrollY;S.taskPage=id;S.et=null;S.tdDel=false;S.tdEditDesc=false;render();window.scrollTo(0,0);}
+function closeTask(){S.taskPage=null;S.tdDel=false;S.tdEditDesc=false;render();window.scrollTo(0,S.listScroll||0);}
 function setTF(t){S.tradeFilter=t;render();}
 function togET(id){S.et=S.et===id?null:id;render();}
 // Priority edit. Mirrors setTS, but reverts and tells the user if the write
@@ -923,7 +926,10 @@ function setTP(id,pr){
 }
 function setTS(id,st){
   var t=S.tasks.find(function(x){return String(x.ID)===String(id);});
-  if(t)t.Status=st;S.et=null;render();
+  if(t)t.Status=st;S.et=null;
+  // DONE from the detail page: the task leaves every list, so go back to the list
+  // instead of sitting on a finished task. Other statuses stay on the page.
+  if(st==='DONE'&&S.taskPage&&String(S.taskPage)===String(id))closeTask();else render();
   apiCall({action:'updateTaskStatus',id:id,status:st});
 }
 function togSH(id){

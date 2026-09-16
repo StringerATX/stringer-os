@@ -121,11 +121,16 @@ There is no UI filter control and none is needed — the filtering is server-sid
   dinner") are inferred and shown with a `~`, and rows with no time at all go to an
   **Anytime** block rather than being given a made-up hour.
 - **Priority is editable** in task detail, same button pattern as Status. This needed a
-  new backend action `updateTaskPriority` (writes TASKS col 6) — **redeploy
-  `Code_final.gs` as a New version to activate.** Until then the buttons revert and
-  alert; they do not silently fail.
-- **`savePersonalItems` hardened** in the same pending deploy — see the MAC_PERSONAL
-  corruption note below.
+  new backend action `updateTaskPriority` (writes TASKS col 6). Live since the
+  2026-09-16 backend redeploy. If the buttons ever revert and alert again, the
+  backend is on an old version.
+- **`savePersonalItems` hardened** in the same deploy (live 2026-09-16) — see the
+  MAC_PERSONAL corruption note below.
+- **DONE snaps back to the list (2026-09-16).** Tapping DONE on the task detail page
+  closes the page and returns to the list you came from at the same scroll position,
+  so the next task sits where the finished one was. Other statuses stay on the page.
+  `openTask` records `S.listScroll`; `closeTask()` restores it and is also what the
+  back arrow and delete use.
 - **Readability pass:** the two secondary greys were failing on the dark ground
   (`#6b6860` ~3.5:1, `#3a3a36` ~1.7:1); now ~10:1 and ~6.3:1. Type scale raised
   throughout (9->13, 11->14, 13->16px). Because the palette got lighter, white-on-colour
@@ -221,30 +226,24 @@ with `p4`: its "min 2x" target for the morning property loop is not in `pd2`.
 
 ## Pending work / roadmap
 
-**Immediate — redeploy `Code_final.gs` as a New version (2026-09-02).** Two changes
-are committed but NOT live: `updateTaskPriority` (Priority editing is inert without
-it — the buttons revert and alert) and the hardened `savePersonalItems` (lock +
-single `setValues`, which is what stops the MAC_PERSONAL corruption recurring).
-Deploy > Manage deployments > Edit > New version.
+**Backend redeploy DONE 2026-09-16** (Mac, from the laptop, paste of
+`Code_DEPLOY_LOCAL.gs` built from commit 0685020 + New version). Verified: the
+`updateTaskPriority` probe returns `not found`, Priority edits stick, DONE stamps
+`CompletedAt`. Live backend == repo `Code_final.gs` as of that commit. Note for the
+regen: the paste file needs BOTH the 4 tokens and the 4 emails in `getSessionUser_`
+restored; the real values live only in the deployed `Code.gs` and the local copies.
 
 **Leftover from the Aug 24 audit (both items themselves are DONE as of 08-28):** if
 `removeStaleBackup.gs` still exists as a file in the **Apps Script project**, delete
 it there. The copy in this repo is kept as a record, like the other one-time scripts.
 
-**Still owed (as of 2026-09-15, both need a desktop day):**
-- Desktop two-folder census and cleanup (see Machines / local folders).
-- Apps Script backend redeploy of `Code_final.gs` as a New version. Until then
-  `updateTaskPriority` is inert (probe returns "Unknown action"),
-  `savePersonalItems` is still the unhardened version, and the 2026-09-15 additions
-  (`CompletedAt` stamp in `updateTaskStatus`, `archiveDoneTasks` action) are not live.
-  **A paste-ready copy with the real tokens restored is on the laptop at
-  `~/OneDrive/Desktop/stringer-os/Code_DEPLOY_LOCAL.gs`** (gitignored). Steps: open the
-  Sheet > Extensions > Apps Script > Code.gs > select all > paste that file > Save >
-  Deploy > Manage deployments > pencil > Version: New version > Deploy. Verify with
-  `action=updateTaskPriority&id=__probe__&priority=HIGH` returning `not found` (not
-  "Unknown action"), then edit a Priority in the app and refresh. Sessions on the laptop work
-  around both: set Priority at addTask time, and rewrite MAC_PERSONAL only from a
-  single script call with a backup taken first.
+**Still owed (as of 2026-09-16):**
+- Desktop two-folder census and cleanup (see Machines / local folders). Needs a desktop day.
+- (Backend redeploy: done 2026-09-16, see above. Next time the backend changes, the
+  recipe is: regenerate `~/OneDrive/Desktop/stringer-os/Code_DEPLOY_LOCAL.gs` from
+  `Code_final.gs` with tokens + emails restored, paste into Code.gs, Save, Deploy >
+  Manage deployments > pencil > Version: New version > Deploy, then probe
+  `action=updateTaskPriority&id=__probe__&priority=HIGH` for `not found`.)
 - Overnight rhythm auto-reset is still roadmap #2 below.
 
 **Recurring monthly step: archive sweep (manual trigger for now; automation candidate
