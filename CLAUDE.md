@@ -113,6 +113,21 @@ she sees **8 distinct tasks** (after the Aug 31 dedupe; an earlier note said 7).
 There is no UI filter control and none is needed — the filtering is server-side in
 `getAppData_`. Do not "fix" this by adding a client-side assignee filter.
 
+**Crew day view - frontend LIVE (2026-09-28), no backend change.** Phone-first
+"today + next workday" view for one person, built into the existing `rToday`:
+- Crew (Christian/Mitchell) now land on **MY DAY** (was MY TASKS). The owner gets a
+  **CREW** sub-tab (between PROJECTS and SHOPPING) with a Christian/Mitchell picker.
+- Tasks have no date column, so the SCHEDULE places them: a task on a project the
+  person is booked at today goes under TODAY, the next workday's project under
+  TOMORROW (Fri/Sat show NEXT WORKDAY = Monday), everything else under OPEN.
+  Person match = `AssignedTo == name` or `"Crew"` (same rule as the server filter).
+- 48px checkboxes write `updateTaskStatus` DONE; the row stays struck through for the
+  session and a second tap restores the previous status. Failed writes revert + alert.
+  Tapping the text opens the normal task detail page.
+- Functions: `rCrewDay`, `crewTasks`, `crewItem`, `crewTick`, `nextWorkday`. The
+  sub-nav now scrolls sideways at phone width (5 owner tabs no longer fit at 375px).
+- It is only as good as the SCHEDULE: if nobody is booked, every task sits in OPEN.
+
 **Rhythm tab + editable Priority — frontend LIVE, backend PENDING DEPLOY (2026-09-02).**
 - **RHYTHM tab** (owner nav, between MAC and STRINGER) renders the MAC_PERSONAL daily
   rhythm as a time-ordered day. MAC is now "Responsibilities" and shows only the
@@ -146,7 +161,11 @@ There is no UI filter control and none is needed — the filtering is server-sid
   so those machines silently kept the 480px phone column. There is no max-width above
   the breakpoint on purpose — on a monitor this fills the screen like a spreadsheet.
 
-**Data:** synced through 2026-09-15 (housekeeping pass: archive sweep 212 -> 133 tasks,
+**Data:** synced through 2026-09-28 (evening sync from the laptop: Terrible Wine
+invoice 1118 paid in full + financial items closed, bee-caves checklist split into
+Arnold/Mac tasks, Aurora pushed to week of 10/12, 10/5 San Antonio trip for
+Christian + Mitchell, Rosette/Birol/Mueller updates, money + admin tasks, Oct 2-8
+travel on the SCHEDULE). Before that 2026-09-22 (TASKS 138 -> 149) and 2026-09-15 (housekeeping pass: archive sweep 212 -> 133 tasks,
 shelving install / TW full clean / Lori 9/12 flipped DONE; Tue-night reconcile: Terrible Wine opened 9/14,
 public Fri 9/18; Aurora framing day; MAC_PERSONAL regimen rewritten to pd13-pd22).
 Earlier: 2026-09-10 (Thu-night reconcile via the live API: new
@@ -237,8 +256,13 @@ restored; the real values live only in the deployed `Code.gs` and the local copi
 `removeStaleBackup.gs` still exists as a file in the **Apps Script project**, delete
 it there. The copy in this repo is kept as a record, like the other one-time scripts.
 
-**Still owed (as of 2026-09-16):**
-- Desktop two-folder census and cleanup (see Machines / local folders). Needs a desktop day.
+**Still owed (as of 2026-09-28):**
+- **Desktop two-folder census and cleanup is STILL OWED** (see Machines / local
+  folders). Needs a desktop day; every session since 9/10 has been on the laptop.
+- MAC_PERSONAL has duplicated again: 55 rows on 2026-09-28 (was 24 on 09-15), e.g.
+  `pd13`/`pd14`/`pd16` x4. The frontend `dedupePersonal()` hides it; the sheet needs a
+  dedupe pass and the cause needs finding (the 09-02 lock fix is live, so something
+  else is appending).
 - (Backend redeploy: done 2026-09-16, see above. Next time the backend changes, the
   recipe is: regenerate `~/OneDrive/Desktop/stringer-os/Code_DEPLOY_LOCAL.gs` from
   `Code_final.gs` with tokens + emails restored, paste into Code.gs, Save, Deploy >
@@ -293,6 +317,16 @@ and the row stays readable in the Archive tab and restorable via "Recently delet
 - Laptop folder `~/OneDrive/Desktop/stringer-os` is **not a git clone** (no `.git`; its
   `index.html` is the Aug 3 build). Confirmed 9/10/26. Re-clone before any local edits
   there; the API URL it holds is still the live one.
+
+## Google Drive layout (2026-09-28)
+
+- Drive root holds exactly one Stringer ops file: the Google Sheet **Stringer Final
+  Ops 2026** (the database, ID above).
+- Every old xlsx copy of STRINGER OS / STRINGER 2026 OS / CONSTRUCTION OS / Final Ops
+  now lives in root folder **OLD - DO NOT USE** (70 files moved 09-22, 32 more on
+  09-28 from folders `1IR3IVV...` and `1GNdvKBd...`). Moves only, nothing deleted.
+- Deliberately left in place: `Myer's Creek 2026 OS.xlsx` (different project, just
+  matches "OS"), `Stringer_Reconciliation_2025-2026` (bookkeeping, not an OS copy).
 
 ## Files in this repo
 

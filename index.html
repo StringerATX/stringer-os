@@ -28,7 +28,8 @@ button{font-family:inherit;cursor:pointer;}input,select,textarea{font-family:inh
 .nbtn.active{color:#f0a03f;}
 .nicon{font-size:17px;}.nlabel{font-size:13px;letter-spacing:.12em;}
 .content{padding-bottom:140px;}
-.subnav{background:#1a1a18;border-bottom:1px solid #3d3831;display:flex;padding:0 16px;}
+.subnav{background:#1a1a18;border-bottom:1px solid #3d3831;display:flex;padding:0 16px;overflow-x:auto;scrollbar-width:none;}
+.sbtn{white-space:nowrap;flex-shrink:0;}
 .sbtn{padding:12px 16px 11px;background:transparent;border:none;border-bottom:2px solid transparent;color:#c3bcab;font-size:13px;letter-spacing:.15em;margin-bottom:-1px;}
 .sbtn.active{color:#f0a03f;border-bottom-color:#f0a03f;}
 .slabel{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
@@ -199,6 +200,19 @@ button{font-family:inherit;cursor:pointer;}input,select,textarea{font-family:inh
        grid-template-columns:repeat(auto-fill,minmax(400px,1fr));}
   .header,.subnav{padding-left:40px;padding-right:40px;}
 }
+/* Crew day (phone-first): big type, big tap targets. */
+.cwho{display:flex;gap:8px;padding:4px 0 12px;flex-wrap:wrap;}
+.cwho .chip{font-size:16px;padding:10px 18px;}
+.cday{font-size:15px;letter-spacing:.14em;color:#f0a03f;margin:18px 0 6px;font-weight:600;}
+.csched{background:#1a1a18;border-left:3px solid #3f7cc4;border-radius:4px;padding:10px 12px;margin:6px 0;font-size:17px;color:#f2eee4;line-height:1.4;}
+.csched .ct{font-weight:600;}.csched .cn{font-size:15px;color:#c3bcab;margin-top:2px;}
+.citem{display:flex;align-items:flex-start;gap:14px;border-bottom:1px solid #2b2823;padding:14px 0;}
+.cchk{width:48px;height:48px;border-radius:8px;border:2px solid #9a9384;background:transparent;color:white;font-size:26px;flex-shrink:0;cursor:pointer;line-height:1;}
+.cchk.on{background:#5d9b6e;border-color:#5d9b6e;}
+.cbody{flex:1;min-width:0;padding-top:2px;cursor:pointer;}
+.cdesc{font-size:20px;line-height:1.35;color:#f2eee4;}
+.cdesc.done{color:#9a9384;text-decoration:line-through;}
+.cmeta{font-size:14px;color:#c3bcab;margin-top:4px;letter-spacing:.06em;}
 .crewfoot{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:#1a1a18;border-top:1px solid #3d3831;padding:10px 16px 14px;text-align:center;font-size:13px;color:#9a9384;letter-spacing:.15em;text-transform:uppercase;}
 </style>
 </head>
@@ -549,11 +563,12 @@ function rStringer(){
   if(S.taskPage) return rTaskDetail();
   if(S.projectPage) return rProjectDetail();
   var own=S.user.role==='owner';
-  var h=own?'<div class="subnav">'+sb('today','TODAY')+sb('sched','SCHEDULE')+sb('projects','PROJECTS')+sb('shopping','SHOPPING')+'</div>':'<div class="subnav">'+sb('today','MY TASKS')+sb('sched','SCHEDULE')+sb('shopping','SHOPPING')+'</div>';
+  var h=own?'<div class="subnav">'+sb('today','TODAY')+sb('sched','SCHEDULE')+sb('projects','PROJECTS')+sb('crew','CREW')+sb('shopping','SHOPPING')+'</div>':'<div class="subnav">'+sb('today','MY DAY')+sb('sched','SCHEDULE')+sb('shopping','SHOPPING')+'</div>';
   h+='<div class="pad">';
   if(S.sv==='today')h+=rToday();
   else if(S.sv==='sched')h+=rSchedule();
   else if(S.sv==='projects')h+=rProjectList();
+  else if(S.sv==='crew')h+=rCrewDay(S.crewWho||'Christian',true);
   else h+=rShopping();
   return h+'</div>';
 }
@@ -810,10 +825,7 @@ function rToday(){
     h+=sl('All Open',all.length,'margin-top:20px');
     all.forEach(function(t){h+=tiSimple(t,true);});
   }else{
-    var mine=S.tasks.filter(function(t){return t.Status!=='DONE';}).sort(function(a,b){return PO[a.Priority]-PO[b.Priority];});
-    h+=sl('Your Tasks',mine.length);
-    if(!mine.length)h+='<div class="empty">No open tasks</div>';
-    mine.forEach(function(t){h+=tiSimple(t,false);});
+    h+=rCrewDay(S.user.name,false);
   }
   h+=S.at==='today'?atfSimple():'<button class="addbtn" onclick="startAT(\'today\')">+ Add task</button>';
   if(own&&S.tasksArchive&&S.tasksArchive.length){
@@ -821,6 +833,64 @@ function rToday(){
     if(S.showArchive)S.tasksArchive.forEach(function(a){h+=archiveItem(a);});
   }
   return h;
+}
+
+// ─── CREW DAY ────────────────────────────────────────────────
+// One person's today + next workday, phone-first. Same TASKS/SCHEDULE data, no
+// new tables. Tasks carry no date, so they are placed by the SCHEDULE: tasks on a
+// project the person is booked at today go under Today, the next workday's
+// project under that day, and the rest under Open. Crew get this as their Today
+// view (the server already filters their tasks); the owner opens it from the
+// CREW sub-tab with a person picker. Ticking a box writes DONE; the row stays
+// (struck through) for the session so a mis-tap can be unticked.
+function nextWorkday(ds){
+  var p=ds.split('-');var d=new Date(+p[0],+p[1]-1,+p[2]);
+  do{d.setDate(d.getDate()+1);}while(d.getDay()===0||d.getDay()===6);
+  return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+}
+function crewTasks(who){
+  S.crewTicked=S.crewTicked||{};
+  return S.tasks.filter(function(t){
+    return (t.AssignedTo===who||t.AssignedTo==='Crew')&&(t.Status!=='DONE'||S.crewTicked[String(t.ID)]);
+  }).sort(function(a,b){return PO[a.Priority]-PO[b.Priority];});
+}
+function rCrewDay(who,picker){
+  var td=todayStr(),tm=nextWorkday(td),h='';
+  if(picker)h+='<div class="cwho">'+['Christian','Mitchell'].map(function(n){return ch(n,n===who,'S.crewWho=\''+n+'\';render()');}).join('')+'</div>';
+  var tasks=crewTasks(who),used={};
+  var wk=new Date().getDay();
+  [[td,'TODAY'],[tm,(wk===5||wk===6)?'NEXT WORKDAY':'TOMORROW']].forEach(function(dd,i){
+    var sched=S.schedule.filter(function(e){return e.Date===dd[0]&&e.Person===who;}).sort(function(a,b){return timeMin(a.StartTime)-timeMin(b.StartTime);});
+    var projs=sched.map(function(e){return String(e.Project||'');});
+    var list=tasks.filter(function(t){return !used[t.ID]&&projs.indexOf(String(t.Project))>=0;});
+    list.forEach(function(t){used[t.ID]=1;});
+    h+='<div class="cday"'+(i?' style="margin-top:28px"':'')+'>'+dd[1]+' · '+dayLabel(dd[0])+'</div>';
+    if(!sched.length)h+='<div class="empty">Nothing on the schedule</div>';
+    sched.forEach(function(e){h+='<div class="csched"><div class="ct">'+esc(e.StartTime||'')+(e.EndTime?' - '+esc(e.EndTime):'')+(e.StartTime?' · ':'')+esc(e.Location||e.Project||'')+'</div>'+(e.Notes?'<div class="cn">'+esc(e.Notes)+'</div>':'')+'</div>';});
+    list.forEach(function(t){h+=crewItem(t);});
+  });
+  var rest=tasks.filter(function(t){return !used[t.ID];});
+  h+='<div class="cday" style="margin-top:28px">OPEN · ANY DAY ('+rest.length+')</div>';
+  if(!rest.length)h+='<div class="empty">No open tasks</div>';
+  rest.forEach(function(t){h+=crewItem(t);});
+  return h;
+}
+function crewItem(t){
+  var pr=S.projects.find(function(p){return String(p.ID)===String(t.Project);});
+  var on=t.Status==='DONE';
+  return'<div class="citem"><button class="cchk'+(on?' on':'')+'" aria-label="'+(on?'Mark not done':'Mark done')+'" onclick="crewTick(\''+t.ID+'\')">'+(on?'✓':'')+'</button><div class="cbody" onclick="openTask(\''+t.ID+'\')"><div class="cdesc'+(on?' done':'')+'">'+esc(String(t.Description||''))+'</div><div class="cmeta">'+(pr?esc(String(pr.Name)):'')+(t.AssignedTo==='Crew'?' · crew':'')+(t.Priority==='HIGH'?' · <span style="color:#e0553f">HIGH</span>':'')+'</div></div></div>';
+}
+function crewTick(id){
+  var t=S.tasks.find(function(x){return String(x.ID)===String(id);});
+  if(!t)return;
+  S.crewTicked=S.crewTicked||{};
+  var prev=t.Status,next;
+  if(prev==='DONE'){next=S.crewTicked[String(id)]||'NEW';}
+  else{S.crewTicked[String(id)]=prev;next='DONE';}
+  t.Status=next;render();
+  apiCall({action:'updateTaskStatus',id:id,status:next}).then(function(r){
+    if(r&&r.error){t.Status=prev;render();alert('Not saved: '+r.error);}
+  }).catch(function(){t.Status=prev;render();alert('Not saved - no signal? Try again.');});
 }
 
 function archiveItem(a){
