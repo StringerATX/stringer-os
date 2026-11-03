@@ -88,6 +88,28 @@ To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
 
 ## Current feature status (as of 2026-08-31)
 
+**Hide-finished + archive everywhere — frontend LIVE (2026-11-02), no backend change.**
+- **Project tiles carry a status badge.** `SC` gained the project statuses actually
+  in use (COMPLETE, CLOSED, CANCELLED, PLANNING, SCHEDULING, ONGOING, AWAITING
+  PAYMENT, COLLECTIONS); before this only task statuses were mapped, so the
+  detail-page pill fell back to grey for every project status.
+- **Finished projects are hidden** behind a "Show finished (n)" chip. The hidden set
+  is `PDONE` = COMPLETE/CLOSED/CANCELLED/DONE. **AWAITING PAYMENT and COLLECTIONS
+  are deliberately NOT in it** — a finished job you have not been paid for has to
+  stay visible. Do not "tidy" them into PDONE.
+- **MAC and CREATIVE items archive instead of vanishing.** Archiving prefixes the
+  row's category with `archived:` (`isArch`/`baseCat` helpers), so the original
+  category survives, the row is never removed from the sheet, and restore is one
+  tap. Archived items drop out of MAC, RHYTHM and every creative filter chip,
+  behind a "Show archived (n)" toggle. This needed no schema change because
+  `savePersonalItems` and `saveIdeas` already rewrite their whole tab from the
+  array the app sends.
+- `rmI` (the old hard-delete for ideas) is still defined but **nothing in the UI
+  calls it** — the × now calls `archI`.
+- Verified in Chromium against stub data before push: cancelled project hidden then
+  shown on toggle, AWAITING PAYMENT stayed visible, archived personal item hidden
+  from both MAC and RHYTHM, archived idea hidden from all chips, no page errors.
+
 **Live (frontend pushed + backend deployed):**
 - Task detail page: description (editable), notes (editable, renders an "Open
   Attachment" button for URL notes), status buttons, notes preview in lists.
@@ -160,6 +182,39 @@ There is no UI filter control and none is needed — the filtering is server-sid
   scaling, reports under 900px of CSS width even on a large monitor (measured: 887px),
   so those machines silently kept the 480px phone column. There is no max-width above
   the breakpoint on purpose — on a monitor this fills the screen like a spreadsheet.
+
+**Data: synced 2026-11-02 from the Hazel ops chat, via the Sheets API rather than
+this app's own actions.** What changed, so a later session is not surprised:
+- **PROJECTS rewritten** (20 rows). Terrible Wine corrected from "IN PROGRESS 6%,
+  actual $4,700" to **97%, actual $284,072.53** — the real billed figure is
+  $558,523.84 but that includes phantom invoice 1093 ($274,451.31), which still
+  needs voiding in QuickBooks. Bee Cave 40% -> 95%. Alamo Ritz Sign and Dracula
+  closed. Keith Ruckus CANCELLED (job is dead). Stone Oak's **duplicate row merged**
+  — there were two rows sharing the ID `alamo-stone-oak`. Metro moved to
+  COLLECTIONS. **Added, were missing entirely:** Wilder House, Myers Creek Building
+  1 (Mac GC), Myers Creek Building 2 (Christian GC), Alamo Lakeline (CLOSED).
+  Note: billed revenue was written into the `Actual` column; if `Actual` was ever
+  meant to be cost-to-date, that needs reversing.
+- **Archive sweep run by hand**, NOT via `archiveDoneTasks`. 81 DONE rows moved
+  TASKS -> TASKS_ARCHIVE (181 -> 104 live), and all 64 SCHEDULE rows (all dated
+  Aug 3 - Oct 5) moved to SCHEDULE_ARCHIVE, which was nearly empty. Both stamped
+  `DeletedAt` 2026-11-02 + a reason. **It ignored the 30-day rule and moved every
+  DONE row regardless of date**, so "Recently deleted" on the Today view will show
+  those 81 until real deletes push them down. Same cosmetic side effect as the
+  09-15 sweep.
+- **Two Tracy rows were marked DONE but are not done** and got swept into the
+  archive with everything else: "Fix QuickBooks company info" (QuickBooks is STILL
+  a sole proprietor under Mac's SSN) and "Texas Secretary of State entity search"
+  (still open, certified Certificate of Formation still not ordered). Treat DONE
+  flags on Tracy-assigned rows as unverified.
+- **4 Rosette tasks added** (rows 183-186): balcony handrail design/fab/weld/install
+  broken out of the old Aug 17 install-push row; pathway lighting sample for Matt,
+  consolidating four scattered stale lighting tasks; tech room door won't close
+  because the hardwood is too high, trim the doors (Matt asked 11-02); schedule the
+  walkthrough for the June 2027 League of Women Voters office -> control/board room
+  conversion.
+- SHOPPING: the plexiglass line was on `alamo-park-north` but the work was **Stone
+  Oak** scope; moved and marked BOUGHT (installed, invoice sent, awaiting payment).
 
 **Data:** synced through 2026-09-28 (evening sync from the laptop: Terrible Wine
 invoice 1118 paid in full + financial items closed, bee-caves checklist split into
@@ -307,6 +362,66 @@ and the row stays readable in the Archive tab and restorable via "Recently delet
    Optional in-app AI suggestions would need an Anthropic API key in Apps Script.
 4. **`updateProject` action** — so jurisdiction/other project fields can be set via API.
 5. **Per-user personal/creative tabs for crew** (independent).
+
+**THE DAILY PLAN — the thing Mac actually wants (spec'd 2026-11-02).**
+Mac opens the app on MAC and wants one ordered list for the whole day, woven from
+the rhythm, his own to-dos, his project tasks and his calendar. His framing, in his
+words: it is **the framework and the goal for the day, not a contract.** Falling
+short is fine; what didn't happen moves and everything behind it shifts. Build for
+that, not for a plan that scolds him.
+
+Four things block it today, in the order they have to be fixed:
+1. **Rhythm items never reset** (roadmap #2 above). Nothing flips `done` back, so a
+   stale tick makes a whole day read complete. **Nothing else here works until this
+   does.** Preferred fix: a `LastDone` date per row compared against today, not a
+   nightly trigger that clears flags — it survives a missed trigger and it gives
+   Mac a streak history. Reset target is ~3am local.
+2. **TASKS has no date column**, so nothing can say "this task is for today." The
+   crew day view dodges this by reading SCHEDULE bookings; Mac is not booked on the
+   SCHEDULE the way crew are, so he needs a real date or Today flag.
+3. **Calendar is not connected at all** — nothing in the API reads it, so
+   appointments are invisible to the app.
+4. **Rhythm times are regex'd out of the description text** (`rhythmHour`), with
+   "morning" -> 7am and so on. Too fragile to sequence a day on. Needs a real time
+   field.
+
+Distinction to preserve: **rhythm items reset, to-dos push.** "Drink water" is
+recurring and simply comes back tomorrow; an unfinished to-do moves to tomorrow and
+shifts the rest. Do not treat them the same.
+
+Mac also wants **Google Calendar to hold the record of what actually happened** —
+what got done, pushed or resolved each day — not just the forward plan. Open design
+question flagged to him: read-only for appointments plus ONE end-of-day summary
+entry is far more likely to survive than writing 8 generated blocks a day onto his
+real calendar.
+
+**Architecture note:** the endgame is NOT a smarter app. It is roadmap #3, the MCP
+connector — Mac tells Claude "plan my day" in the ops chat, where the calendar, the
+board, his health items and what he is behind on are all already visible, and the
+finished plan lands in the app as today's list. The app is the display surface. An
+auto-generating app will be wrong often enough that he stops trusting it, and the
+day he stops trusting it he stops opening it.
+
+Still needed from Mac before this can be built: the real fixed sequence of his
+morning (he gave an example, not the list), roughly how many working hours a day
+the plan should assume, and whether Spanish and guitar are daily rhythm items or
+goals with milestones.
+
+**Lane 2 queue — batch these into ONE Apps Script deploy, do not redeploy per item:**
+- `deleteProject` (archive-then-remove, same shape as `deleteTask`) — Mac asked for
+  a delete button on project tiles; there is no project delete action at all today.
+- `updateProject` (roadmap #4, also unblocks a per-project "keep visible" pin, which
+  is why the 11-02 hide-finished toggle is global-only for now).
+- The four daily-plan items above.
+- Google Tasks -> VOICE_INBOX puller on a morning time trigger. **The Inbox triage
+  half is fully built and works; nothing feeds it.** `addVoiceEntry` is the only
+  writer and it stamps Source=`App`, i.e. typed in by hand. Mac's intent was Gemini
+  on his Galaxy S26 -> Google Tasks -> a trigger pulls new items in -> he triages.
+  That capture half was never built.
+- Harden `saveIdeas` with the same `LockService` document lock + single `setValues`
+  that `savePersonalItems` got on 09-02 — it still has the unhardened
+  `clearContents` + per-row append shape, and the 11-02 archive feature means ideas
+  now get written far more often than before.
 - Follow-ups Mac owns: confirm Alex Sanchez's jurisdiction; check with Arnold whether
   the two bee-caves concrete pours can have a weekend gap.
 
