@@ -125,6 +125,12 @@ button{font-family:inherit;cursor:pointer;}input,select,textarea{font-family:inh
 .icat{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:#f0a03f;margin-bottom:3px;}
 .itext{font-size:16px;line-height:1.5;color:#f2eee4;}.idate{font-size:13px;color:#9a9384;margin-top:4px;}
 .irow{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+.ibody{flex:1;min-width:0;cursor:pointer;}
+.iprev{font-size:14px;line-height:1.45;color:#c3bcab;margin-top:4px;}
+.ichev{color:#9a9384;font-size:17px;align-self:center;}
+.id-text{font-size:20px;line-height:1.35;color:#f2eee4;margin-top:2px;}
+.id-body{width:100%;min-height:220px;max-width:900px;background:#1a1a18;border:1px solid #3d3831;border-radius:4px;color:#f2eee4;font:inherit;font-size:16px;line-height:1.6;padding:12px;resize:vertical;}
+.id-read{max-width:900px;font-size:16px;line-height:1.65;color:#f2eee4;white-space:pre-wrap;}
 .rmbtn{background:transparent;border:none;color:#9a9384;font-size:17px;padding:0 4px;cursor:pointer;}
 .person-item{padding:12px 0;border-bottom:1px solid #2b2823;cursor:pointer;}
 .person-row{display:flex;align-items:flex-start;gap:10px;}
@@ -299,7 +305,7 @@ var S = {
   captureRoute:'MAC',se:null,sadd:false,tdDel:false,tdEditDesc:false,showArchive:false,
   triageId:null,triageDest:null,
   showDoneProjects:false,showArchPersonal:false,showArchIdeas:false,showSite:false,_wake:'',
-  openGroup:{},layout:'tile'
+  openGroup:{},layout:'tile',ideaPage:null,ideaEdit:false,ideaScroll:0
 };
 // Layout choice is a per-device convenience, so localStorage is the right home
 // for it. Wrapped because a private window or blocked site data makes these throw.
@@ -412,7 +418,7 @@ function apiCall(params) {
   return fetch(apiUrl(new URLSearchParams(params).toString())).then(function(r){return r.json();});
 }
 
-function switchTab(t){S.tab=t;S.projectPage=null;S.taskPage=null;S.at=null;S.as=false;S.tradeFilter='all';S.triageId=null;S.triageDest=null;['inbox','mac','rhythm','stringer','creative','people'].forEach(function(x){var b=document.getElementById('nav-'+x);if(b)b.className='nbtn'+(x===t?' active':'');});render();}
+function switchTab(t){S.tab=t;S.projectPage=null;S.taskPage=null;S.ideaPage=null;S.ideaEdit=false;S.at=null;S.as=false;S.tradeFilter='all';S.triageId=null;S.triageDest=null;['inbox','mac','rhythm','stringer','creative','people'].forEach(function(x){var b=document.getElementById('nav-'+x);if(b)b.className='nbtn'+(x===t?' active':'');});render();}
 function svSwitch(v){S.sv=v;S.at=null;S.as=false;S.projectPage=null;S.taskPage=null;render();}
 
 function render(){
@@ -422,6 +428,10 @@ function render(){
     var tproj=tp?S.projects.find(function(p){return String(p.ID)===String(tp.Project);}):null;
     hdr.className='header detail';
     hdr.innerHTML='<button class="hback" onclick="closeTask()">←</button><div class="hname project">'+(tproj?esc(String(tproj.Name)):'Task')+'</div>';
+  } else if(S.ideaPage){
+    var ip=S.ideas.find(function(x){return String(x.id)===String(S.ideaPage);});
+    hdr.className='header detail';
+    hdr.innerHTML='<button class="hback" onclick="closeIdea()">←</button><div class="hname project">'+esc(ip?baseCat(ip.category):'Idea')+'</div>';
   } else if(S.projectPage){
     var proj=S.projects.find(function(p){return p.ID===S.projectPage;});
     hdr.className='header detail';
@@ -613,7 +623,7 @@ function doTriage(id){
   }else if(d==='idea'){
     var tx=g('desc').trim();if(!tx)return;
     S.ideas.unshift({id:'i'+Date.now(),text:tx,category:g('cat')||'Film',createdAt:today});
-    apiCall({action:'saveIdeas',ideas:JSON.stringify(S.ideas)});
+    apiCall({action:'saveIdeas',ideas:ideasPayload()});
   }else if(d==='sched'){
     var dt=g('date').trim();if(!dt)return;
     var e={ID:'tmp'+Date.now(),Date:dt,Person:g('who')||'Mac',StartTime:g('start'),EndTime:g('end'),Location:g('loc'),Project:g('proj'),Notes:g('desc'),Status:'PLANNED'};
@@ -1159,6 +1169,7 @@ function rShopping(){
 }
 
 function rCreative(){
+  if(S.ideaPage) return rIdeaDetail();
   var live=S.ideas.filter(function(i){return !isArch(i);});
   var archI_=S.ideas.filter(isArch);
   var fil=S.icat==='all'?live:live.filter(function(i){return i.category===S.icat;});
@@ -1173,12 +1184,68 @@ function rCreative(){
   }
   return h+'</div>';
 }
+// An idea tile. The title is the headline, with the first line of the body
+// underneath so the tab reads as a shelf of things rather than a list of names.
+// Tapping the body opens the full idea; the x stays an archive, not a delete.
 function iItem(i){
-  var a=isArch(i);
-  return'<div class="iitem"'+(a?' style="opacity:.55"':'')+'><div class="irow"><div style="flex:1"><div class="icat">'+esc(baseCat(i.category))+(a?' · archived':'')+'</div><div class="itext">'+esc(i.text)+'</div><div class="idate">'+esc(i.createdAt)+'</div></div>'+
-    (a?'<button class="rmbtn" title="Restore" onclick="unarchI(\''+i.id+'\')">↩</button>'
-      :'<button class="rmbtn" title="Archive" onclick="archI(\''+i.id+'\')">×</button>')+
+  var a=isArch(i),id=String(i.id).replace(/'/g,"\\'");
+  var prev=String(i.body||'').trim().replace(/\s+/g,' ');
+  if(prev.length>120)prev=prev.slice(0,120)+'…';
+  return'<div class="iitem"'+(a?' style="opacity:.55"':'')+'><div class="irow"><div class="ibody" onclick="openIdea(\''+id+'\')"><div class="icat">'+esc(baseCat(i.category))+(a?' · archived':'')+'</div><div class="itext">'+esc(i.text)+'</div>'+
+    (prev?'<div class="iprev">'+esc(prev)+'</div>':'')+
+    '<div class="idate">'+esc(i.createdAt)+(i.link?' · has a doc':'')+'</div></div>'+
+    '<span class="ichev" onclick="openIdea(\''+id+'\')">›</span>'+
+    (a?'<button class="rmbtn" title="Restore" onclick="unarchI(\''+id+'\')">↩</button>'
+      :'<button class="rmbtn" title="Archive" onclick="archI(\''+id+'\')">×</button>')+
     '</div></div>';
+}
+
+function openIdea(id){S.ideaScroll=window.scrollY;S.ideaPage=id;S.ideaEdit=false;render();window.scrollTo(0,0);}
+function closeIdea(){S.ideaPage=null;S.ideaEdit=false;render();window.scrollTo(0,S.ideaScroll||0);}
+
+// saveIdeas rewrites the whole tab from the array the app sends, and it travels
+// as a GET query string. Twenty-eight full bodies would blow the URL length, so
+// bodies are stripped and the backend carries them through from the sheet. The
+// one body actually being edited is the exception - that one has to travel.
+function ideasPayload(keepBodyFor){
+  return JSON.stringify(S.ideas.map(function(i){
+    var o={id:i.id,text:i.text,category:i.category,createdAt:i.createdAt};
+    if(keepBodyFor&&String(i.id)===String(keepBodyFor)){o.body=String(i.body||'');o.link=String(i.link||'');}
+    return o;
+  }));
+}
+
+function rIdeaDetail(){
+  var i=S.ideas.find(function(x){return String(x.id)===String(S.ideaPage);});
+  if(!i)return'<div class="pad"><div class="empty">Idea not found</div></div>';
+  var id=String(i.id).replace(/'/g,"\\'");
+  var h='<div class="pad">';
+  h+='<div class="icat">'+esc(baseCat(i.category))+(isArch(i)?' · archived':'')+'</div>';
+  h+='<div class="id-text">'+esc(i.text)+'</div>';
+  h+='<div class="idate" style="margin-bottom:16px">'+esc(i.createdAt)+'</div>';
+  if(S.ideaEdit){
+    h+='<textarea id="ib-'+esc(i.id)+'" class="id-body" autofocus>'+esc(String(i.body||''))+'</textarea>';
+    h+='<div class="facts"><button class="bprim" onclick="saveIdeaBody(\''+id+'\')">Save</button><button class="bcan" onclick="S.ideaEdit=false;render()">Cancel</button></div>';
+  }else if(String(i.body||'').trim()){
+    h+='<div class="id-read">'+esc(String(i.body))+'</div>';
+    h+='<div class="facts"><button class="bcan" onclick="S.ideaEdit=true;render()">Edit</button>'+(i.link?'<a class="td-attach" href="'+esc(String(i.link))+'" target="_blank" rel="noopener">Open the doc</a>':'')+'</div>';
+  }else{
+    h+='<div class="empty">Nothing written down for this one yet.</div>';
+    h+='<div class="facts"><button class="bprim" onclick="S.ideaEdit=true;render()">Write it down</button>'+(i.link?'<a class="td-attach" href="'+esc(String(i.link))+'" target="_blank" rel="noopener">Open the doc</a>':'')+'</div>';
+  }
+  return h+'</div>';
+}
+
+function saveIdeaBody(id){
+  var i=S.ideas.find(function(x){return String(x.id)===String(id);});
+  if(!i)return;
+  var el=document.getElementById('ib-'+i.id);
+  if(!el)return;
+  var prev=String(i.body||'');
+  i.body=el.value;S.ideaEdit=false;render();
+  apiCall({action:'saveIdeas',ideas:ideasPayload(id)}).then(function(r){
+    if(r&&r.error){i.body=prev;render();alert('Not saved: '+r.error);}
+  }).catch(function(){i.body=prev;render();alert('Not saved - network error.');});
 }
 
 function rPeople(){
@@ -1350,7 +1417,7 @@ function subI(){
   var i=document.getElementById('nit');if(!i||!i.value.trim())return;
   var idea={id:'i'+Date.now(),text:i.value.trim(),category:S.nic,createdAt:new Date().toISOString().slice(0,10)};
   S.ideas.unshift(idea);S.ai=false;render();
-  apiCall({action:'saveIdeas',ideas:JSON.stringify(S.ideas)});
+  apiCall({action:'saveIdeas',ideas:ideasPayload()});
 }
 
 function rmI(id){S.ideas=S.ideas.filter(function(i){return i.id!==id;});render();apiCall({action:'saveIdeas',ideas:JSON.stringify(S.ideas)});}
@@ -1360,13 +1427,13 @@ function archI(id){
   var i=S.ideas.find(function(x){return String(x.id)===String(id);});
   if(!i||isArch(i))return;
   i.category='archived:'+baseCat(i.category);render();
-  apiCall({action:'saveIdeas',ideas:JSON.stringify(S.ideas)});
+  apiCall({action:'saveIdeas',ideas:ideasPayload()});
 }
 function unarchI(id){
   var i=S.ideas.find(function(x){return String(x.id)===String(id);});
   if(!i||!isArch(i))return;
   i.category=baseCat(i.category)||'Other';render();
-  apiCall({action:'saveIdeas',ideas:JSON.stringify(S.ideas)});
+  apiCall({action:'saveIdeas',ideas:ideasPayload()});
 }
 
 function subPerson(){
