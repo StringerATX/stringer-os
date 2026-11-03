@@ -73,6 +73,8 @@ button{font-family:inherit;cursor:pointer;}input,select,textarea{font-family:inh
 .pbar{width:3px;height:36px;border-radius:2px;flex-shrink:0;}
 .pinfo{flex:1;}.pname{font-size:16px;font-weight:500;color:#f2eee4;}.psub{font-size:14px;color:#c3bcab;margin-top:2px;}
 .pbadges{display:flex;gap:6px;align-items:center;}
+.pstat{margin-top:5px;}
+.pstat .badge{font-size:11px;letter-spacing:.06em;}
 .badge{padding:2px 6px;border-radius:3px;font-size:13px;color:white;}
 .proj-budget{background:#1a1a18;padding:12px 16px;border-bottom:1px solid #3d3831;display:flex;gap:16px;flex-wrap:wrap;}
 .proj-budget-item{display:flex;flex-direction:column;gap:2px;}
@@ -272,10 +274,24 @@ var S = {
   et:null,at:null,as:false,ap:false,ai:false,icat:'all',
   np:'MEDIUM',nc:'daily',nic:'Film',pp:null,addPerson:false,showAddProject:false,
   captureRoute:'MAC',se:null,sadd:false,tdDel:false,tdEditDesc:false,showArchive:false,
-  triageId:null,triageDest:null
+  triageId:null,triageDest:null,
+  showDoneProjects:false,showArchPersonal:false,showArchIdeas:false
 };
 var PC={HIGH:'#e0553f',MEDIUM:'#f0a03f',LOW:'#c3bcab'};
-var SC={'NEW':'#3f7cc4','IN PROGRESS':'#f0a03f','ON HOLD':'#c3bcab','DONE':'#5d9b6e'};
+// Status colours. Covers task statuses and every project status actually in use.
+// AWAITING PAYMENT and COLLECTIONS are deliberately loud - they mean money owed.
+var SC={'NEW':'#3f7cc4','IN PROGRESS':'#f0a03f','ON HOLD':'#c3bcab','DONE':'#5d9b6e',
+  'COMPLETE':'#5d9b6e','CLOSED':'#5d9b6e','CANCELLED':'#7a6f63',
+  'PLANNING':'#7a4a8c','SCHEDULING':'#7a4a8c','ONGOING':'#3f7cc4',
+  'AWAITING PAYMENT':'#e0553f','COLLECTIONS':'#e0553f'};
+// Projects hidden by default. Money-owed statuses are NOT in here on purpose: a
+// finished job you haven't been paid for still needs to be in your face.
+var PDONE={'COMPLETE':1,'CLOSED':1,'CANCELLED':1,'DONE':1};
+function projDone(p){return !!PDONE[String(p.Status||'').toUpperCase()];}
+// Archiving a personal item or an idea prefixes its category with "archived:" so
+// the original category survives and the row is restorable. No schema change.
+function isArch(x){return /^archived:/i.test(String((x&&x.category)||''));}
+function baseCat(c){return String(c||'').replace(/^archived:/i,'');}
 var CC={health:'#5d9b6e',daily:'#3f7cc4',personal:'#7a4a8c',service:'#e0553f',financial:'#f0a03f'};
 var IC=['Film','Essay / TikTok','Art','Infrastructure','Venture','Music','Other'];
 var PO={HIGH:0,MEDIUM:1,LOW:2};
@@ -403,7 +419,7 @@ function rhItem(i){
     '<button class="chkbtn '+(i.done?'done':'undone')+'" onclick="togP(\''+i.id+'\')">'+(i.done?'✓':'○')+'</button></div>';
 }
 function rRhythm(){
-  var items=dedupePersonal(S.personal).filter(isRhythm);
+  var items=dedupePersonal(S.personal).filter(function(i){return isRhythm(i)&&!isArch(i);});
   var timed=[],anytime=[];
   items.forEach(function(i){var t=rhythmHour(i);if(t)timed.push({i:i,t:t});else anytime.push(i);});
   timed.sort(function(a,b){return (a.t.h*60+a.t.m)-(b.t.h*60+b.t.m);});
@@ -545,7 +561,9 @@ function doTriage(id){
 
 function rMac(){
   // Rhythm items moved to their own tab - this is responsibilities only.
-  var items=dedupePersonal(S.personal).filter(function(i){return !isRhythm(i);});
+  var all=dedupePersonal(S.personal).filter(function(i){return !isRhythm(i);});
+  var items=all.filter(function(i){return !isArch(i);});
+  var arch=all.filter(isArch);
   var open=items.filter(function(i){return !i.done;});
   var done=items.filter(function(i){return i.done;});
   var h='<div class="pad">';
@@ -554,9 +572,34 @@ function rMac(){
   open.forEach(function(i){h+=mi(i);});
   if(done.length){h+=sl('Done',done.length,'margin-top:20px');done.forEach(function(i){h+=mi(i);});}
   h+=S.ap?apf():'<button class="addbtn" onclick="startAP()">+ Add personal item</button>';
+  if(arch.length){
+    h+='<button class="addbtn" style="margin-top:16px" onclick="S.showArchPersonal=!S.showArchPersonal;render()">'+(S.showArchPersonal?'Hide':'Show')+' archived ('+arch.length+')</button>';
+    if(S.showArchPersonal)arch.forEach(function(i){h+=mi(i);});
+  }
   return h+'</div>';
 }
-function mi(i){var c=CC[i.category]||'#c3bcab';return'<div class="mitem"><div class="catdot" style="background:'+c+'"></div><div class="mbody"><div class="mdesc'+(i.done?' done':'')+'">'+esc(i.description)+'</div><div class="mcat">'+esc(i.category)+'</div></div><button class="chkbtn '+(i.done?'done':'undone')+'" onclick="togP(\''+i.id+'\')">'+( i.done?'✓':'○')+'</button></div>';}
+function mi(i){
+  var a=isArch(i),c=CC[baseCat(i.category)]||'#c3bcab';
+  return'<div class="mitem"'+(a?' style="opacity:.55"':'')+'><div class="catdot" style="background:'+c+'"></div><div class="mbody"><div class="mdesc'+(i.done?' done':'')+'">'+esc(i.description)+'</div><div class="mcat">'+esc(baseCat(i.category))+(a?' · archived':'')+'</div></div>'+
+    (a?'<button class="rmbtn" title="Restore" onclick="unarchP(\''+i.id+'\')">↩</button>'
+      :'<button class="chkbtn '+(i.done?'done':'undone')+'" onclick="togP(\''+i.id+'\')">'+(i.done?'✓':'○')+'</button><button class="rmbtn" title="Archive" onclick="archP(\''+i.id+'\')">×</button>')+
+    '</div>';
+}
+// Archive / restore a personal item. savePersonalItems rewrites the whole tab
+// from this array, so flipping the category and saving is all it takes - the row
+// stays in MAC_PERSONAL and nothing is destroyed.
+function archP(id){
+  var i=S.personal.find(function(x){return String(x.id)===String(id);});
+  if(!i||isArch(i))return;
+  i.category='archived:'+baseCat(i.category);render();
+  apiCall({action:'savePersonalItems',items:JSON.stringify(S.personal)});
+}
+function unarchP(id){
+  var i=S.personal.find(function(x){return String(x.id)===String(id);});
+  if(!i||!isArch(i))return;
+  i.category=baseCat(i.category)||'daily';render();
+  apiCall({action:'savePersonalItems',items:JSON.stringify(S.personal)});
+}
 function apf(){var cats=['daily','health','personal','service','financial'];return'<div class="fbox"><input class="finput" id="npt" placeholder="What needs to happen..." autofocus><div class="frow">'+cats.map(function(c){return'<button class="bpill" onclick="setNC(\''+c+'\')" style="background:'+(c===S.nc?CC[c]:'#2b2823')+';color:'+(c===S.nc?'white':'#c3bcab')+'">'+c+'</button>';}).join('')+'</div><div class="facts"><button class="bprim" onclick="subP()">Add</button><button class="bcan" onclick="canAP()">Cancel</button></div></div>';}
 
 function rStringer(){
@@ -801,12 +844,19 @@ function asfFull(){
 
 function rProjectList(){
   var h=S.showAddProject?addProjectForm():'<button class="addbtn" style="margin-bottom:12px" onclick="S.showAddProject=true;render()">+ Add Project</button>';
-  S.projects.forEach(function(p){
+  var fin=S.projects.filter(projDone);
+  var show=S.showDoneProjects?S.projects:S.projects.filter(function(p){return !projDone(p);});
+  if(fin.length)h+='<div class="chips">'+ch((S.showDoneProjects?'Hide':'Show')+' finished ('+fin.length+')',S.showDoneProjects,'S.showDoneProjects=!S.showDoneProjects;render()')+'</div>';
+  show.forEach(function(p){
     var pt=S.tasks.filter(function(t){return String(t.Project)===String(p.ID);});
     var op=pt.filter(function(t){return t.Status!=='DONE';});
     var hi=op.filter(function(t){return t.Priority==='HIGH';});
-    h+='<div class="pcard" onclick="openProject(\''+p.ID+'\')"><button class="phdr"><div class="pbar" style="background:'+esc(String(p.Color||'#3f7cc4'))+'"></div><div class="pinfo"><div class="pname">'+esc(String(p.Name||''))+'</div><div class="psub">'+esc(String(p.Client||''))+' · '+esc(String(p.Location||''))+'</div></div><div class="pbadges">'+(hi.length?'<span class="badge" style="background:#e0553f">'+hi.length+' high</span>':'')+'<span class="badge" style="background:#9a9384">'+op.length+' open</span><span style="color:#c3bcab;font-size:17px">›</span></div></button></div>';
+    var st=String(p.Status||'').toUpperCase();
+    var sbg=SC[st]||'#9a9384';
+    var stb=st?'<span class="badge" style="background:'+sbg+';color:'+onColor(sbg)+'">'+esc(st)+'</span>':'';
+    h+='<div class="pcard" onclick="openProject(\''+p.ID+'\')"><button class="phdr"><div class="pbar" style="background:'+esc(String(p.Color||'#3f7cc4'))+'"></div><div class="pinfo"><div class="pname">'+esc(String(p.Name||''))+'</div><div class="psub">'+esc(String(p.Client||''))+' · '+esc(String(p.Location||''))+'</div><div class="pstat">'+stb+'</div></div><div class="pbadges">'+(hi.length?'<span class="badge" style="background:#e0553f">'+hi.length+' high</span>':'')+(op.length?'<span class="badge" style="background:#9a9384">'+op.length+' open</span>':'')+'<span style="color:#c3bcab;font-size:17px">›</span></div></button></div>';
   });
+  if(!show.length)h+='<div class="empty">No live projects</div>';
   return h;
 }
 
@@ -936,13 +986,26 @@ function rShopping(){
 }
 
 function rCreative(){
-  var fil=S.icat==='all'?S.ideas:S.ideas.filter(function(i){return i.category===S.icat;});
+  var live=S.ideas.filter(function(i){return !isArch(i);});
+  var archI_=S.ideas.filter(isArch);
+  var fil=S.icat==='all'?live:live.filter(function(i){return i.category===S.icat;});
   var h='<div class="pad"><div class="chips">'+ch('All',S.icat==='all',"setIC('all')")+IC.map(function(c){return ch(c,S.icat===c,"setIC('"+c+"')");}).join('')+'</div>';
   h+=S.ai?'<div class="fbox" style="margin-bottom:12px"><textarea class="ftarea" id="nit" rows="3" placeholder="Drop the idea here..." autofocus></textarea><div class="frow">'+IC.map(function(c){return'<button class="bpill" onclick="setNIC(\''+c+'\')" style="background:'+(S.nic===c?'#f0a03f':'#2b2823')+';color:'+(S.nic===c?'white':'#c3bcab')+';font-size:13px">'+c+'</button>';}).join('')+'</div><div class="facts"><button class="bprim" onclick="subI()">Capture</button><button class="bcan" onclick="canAI()">Cancel</button></div></div>':'<button class="addbtn addcreative" onclick="startAI()">✦ Capture an idea</button>';
   h+=sl(S.icat==='all'?'All Ideas':S.icat,fil.length);
   if(!fil.length)h+='<div class="empty">No ideas yet</div>';
-  fil.forEach(function(i){h+='<div class="iitem"><div class="irow"><div style="flex:1"><div class="icat">'+esc(i.category)+'</div><div class="itext">'+esc(i.text)+'</div><div class="idate">'+esc(i.createdAt)+'</div></div><button class="rmbtn" onclick="rmI(\''+i.id+'\')">×</button></div></div>';});
+  fil.forEach(function(i){h+=iItem(i);});
+  if(archI_.length){
+    h+='<button class="addbtn" style="margin-top:16px" onclick="S.showArchIdeas=!S.showArchIdeas;render()">'+(S.showArchIdeas?'Hide':'Show')+' archived ('+archI_.length+')</button>';
+    if(S.showArchIdeas)archI_.forEach(function(i){h+=iItem(i);});
+  }
   return h+'</div>';
+}
+function iItem(i){
+  var a=isArch(i);
+  return'<div class="iitem"'+(a?' style="opacity:.55"':'')+'><div class="irow"><div style="flex:1"><div class="icat">'+esc(baseCat(i.category))+(a?' · archived':'')+'</div><div class="itext">'+esc(i.text)+'</div><div class="idate">'+esc(i.createdAt)+'</div></div>'+
+    (a?'<button class="rmbtn" title="Restore" onclick="unarchI(\''+i.id+'\')">↩</button>'
+      :'<button class="rmbtn" title="Archive" onclick="archI(\''+i.id+'\')">×</button>')+
+    '</div></div>';
 }
 
 function rPeople(){
@@ -1093,6 +1156,20 @@ function subI(){
 }
 
 function rmI(id){S.ideas=S.ideas.filter(function(i){return i.id!==id;});render();apiCall({action:'saveIdeas',ideas:JSON.stringify(S.ideas)});}
+// Ideas archive the same way personal items do - category prefix, row kept.
+// The × used to call rmI and hard-delete; nothing calls rmI from the UI now.
+function archI(id){
+  var i=S.ideas.find(function(x){return String(x.id)===String(id);});
+  if(!i||isArch(i))return;
+  i.category='archived:'+baseCat(i.category);render();
+  apiCall({action:'saveIdeas',ideas:JSON.stringify(S.ideas)});
+}
+function unarchI(id){
+  var i=S.ideas.find(function(x){return String(x.id)===String(id);});
+  if(!i||!isArch(i))return;
+  i.category=baseCat(i.category)||'Other';render();
+  apiCall({action:'saveIdeas',ideas:JSON.stringify(S.ideas)});
+}
 
 function subPerson(){
   var n=document.getElementById('np-cname');if(!n||!n.value.trim())return;
