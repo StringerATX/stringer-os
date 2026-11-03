@@ -115,7 +115,14 @@ function getAppData_(user) {
   var personal = [], ideas = [];
   if (user.role !== 'work') {
     personal = readTab_(ss, 'MAC_PERSONAL').map(function(r) {
-      return { id: String(r.ID), description: String(r.Description), done: String(r.Done).toUpperCase() === 'TRUE', category: String(r.Category || 'daily'), createdAt: String(r.CreatedAt || '') };
+      // Slot/Days/Active/LastDone drive the wake-relative day plan. They live
+      // only in the sheet - the app reads them and only writes LastDone.
+      // Active defaults TRUE when blank so existing rows never silently vanish.
+      return { id: String(r.ID), description: String(r.Description), done: String(r.Done).toUpperCase() === 'TRUE',
+               category: String(r.Category || 'daily'), createdAt: String(r.CreatedAt || ''),
+               slot: plainCell_(r.Slot), days: plainCell_(r.Days),
+               active: String(r.Active === undefined || r.Active === null || r.Active === '' ? 'TRUE' : r.Active).toUpperCase() !== 'FALSE',
+               lastDone: plainCell_(r.LastDone) };
     });
     ideas = readTab_(ss, 'MAC_IDEAS').map(function(r) {
       return { id: String(r.ID), text: String(r.Text), category: String(r.Category || 'Film'), createdAt: String(r.CreatedAt || '') };
@@ -389,6 +396,16 @@ function savePersonalItems(items) {
   if (!lock.tryLock(20000)) return {error:'busy, try again'};
   try {
     var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName('MAC_PERSONAL');
+    // Columns 6-9 (Slot, Days, Active, LastDone) are the day plan. This function
+    // clears the whole tab and rewrites it, and the app does not send those four
+    // on an ordinary checkbox tap - so read them first and carry them through,
+    // or one tap would blank the entire plan. Payload wins when it supplies a
+    // value, which is how the app writes LastDone.
+    var prev = {}, cur = sheet.getDataRange().getValues();
+    for (var r = 1; r < cur.length; r++) {
+      var k = String(cur[r][0]).trim();
+      if (k) prev[k] = { slot: cur[r][5], days: cur[r][6], active: cur[r][7], lastDone: cur[r][8] };
+    }
     // Dedupe by id, last write wins - defence in depth against a bad payload.
     var seen = {}, clean = [];
     items.forEach(function(i) {
@@ -397,12 +414,20 @@ function savePersonalItems(items) {
       if (seen[key] === undefined) { seen[key] = clean.length; clean.push(i); }
       else { clean[seen[key]] = i; }
     });
-    var rows = [['ID','Description','Done','Category','CreatedAt']];
+    var rows = [['ID','Description','Done','Category','CreatedAt','Slot','Days','Active','LastDone']];
     clean.forEach(function(i) {
-      rows.push([i.id, i.description, i.done ? 'TRUE' : 'FALSE', i.category||'daily', i.createdAt||today_()]);
+      var p = prev[String(i.id)] || {};
+      rows.push([i.id, i.description, i.done ? 'TRUE' : 'FALSE', i.category||'daily', i.createdAt||today_(),
+                 plainCell_(keep_(i.slot, p.slot)),
+                 plainCell_(keep_(i.days, p.days)),
+                 activeCell_(keep_(i.active, p.active)),
+                 plainCell_(keep_(i.lastDone, p.lastDone))]);
     });
     sheet.clearContents();
-    sheet.getRange(1, 1, rows.length, 5).setValues(rows);
+    // Plain-text format on the plan columns so Sheets cannot turn a slot number
+    // or a LastDone date into something else, same reason SCHEDULE uses '@'.
+    sheet.getRange(1, 6, Math.max(rows.length, 2), 4).setNumberFormat('@');
+    sheet.getRange(1, 1, rows.length, 9).setValues(rows);
     SpreadsheetApp.flush();
     return {success:true, rows: clean.length};
   } finally {
@@ -492,6 +517,26 @@ function processVoiceEntry(id) {
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────
+// Sheets hands back a Date object for anything it decided was a date, which is
+// why these exist: the day plan must survive a round trip as plain strings.
+function plainCell_(v) {
+  if (v === undefined || v === null) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  return String(v).trim();
+}
+// Payload value wins; fall back to what the sheet already held. Boolean false
+// and the number 0 are real values and must not fall through.
+function keep_(a, b) {
+  if (a === undefined || a === null || a === '') return (b === undefined || b === null) ? '' : b;
+  return a;
+}
+function activeCell_(v) {
+  if (v === undefined || v === null || v === '') return 'TRUE';
+  return String(v).toUpperCase() === 'FALSE' || v === false ? 'FALSE' : 'TRUE';
+}
+
 function readTab_(ss, name) {
   var sheet = ss.getSheetByName(name);
   if (!sheet) return [];
