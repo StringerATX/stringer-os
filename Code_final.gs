@@ -61,6 +61,7 @@ function doGet(e) {
 function handleAction_(action, p, user) {
   if (action === 'updateTaskStatus')     return updateTaskStatus(p.id, p.status);
   if (action === 'updateTaskPriority')   return updateTaskPriority(p.id, p.priority);
+  if (action === 'updateTaskToday')      return updateTaskToday(p.id, p.on);
   if (action === 'toggleShoppingStatus') return toggleShoppingStatus(p.id);
   if (action === 'updateTaskNotes')      return updateTaskNotes(p.id, p.notes);
   if (action === 'updateTaskDescription') return updateTaskDescription(p.id, p.description);
@@ -125,9 +126,19 @@ function getAppData_(user) {
                lastDone: plainCell_(r.LastDone) };
     });
     ideas = readTab_(ss, 'MAC_IDEAS').map(function(r) {
-      return { id: String(r.ID), text: String(r.Text), category: String(r.Category || 'Film'), createdAt: String(r.CreatedAt || '') };
+      // Body holds the full idea text and Link an optional Drive doc, so an idea
+      // tile can open into something readable instead of being a bare title.
+      // Both live only in the sheet - saveIdeas carries them through, because the
+      // app does not send them when it archives or reorders an idea.
+      return { id: String(r.ID), text: String(r.Text), category: String(r.Category || 'Film'),
+               createdAt: String(r.CreatedAt || ''), body: plainCell_(r.Body), link: plainCell_(r.Link) };
     });
   }
+  // Today holds a YYYY-MM-DD date, not a flag, so a task marked for today stops
+  // being today tomorrow with nothing to reset and no nightly trigger to miss -
+  // the same reasoning as LastDone on the rhythm rows. Normalized here because
+  // Sheets hands back a Date object if the column ever loses its '@' format.
+  tasks.forEach(function(t) { t.Today = plainCell_(t.Today); });
   // Per-person task view: everyone except the owner sees only their own tasks.
   // Crew also see tasks assigned to the generic "Crew". Tracy (work) sees only her own.
   if (user.role !== 'owner') {
@@ -272,6 +283,30 @@ function archiveDoneTasks(days, user) {
   return {success:true, moved:moved, skippedNoDate:skipped, days:days};
 }
 
+
+// Mark a task for today, or clear the mark. An 'on' param of anything but
+// 'false', '0' or empty writes today's date into the Today column; those three
+// clear it.
+//
+// It stores a DATE, not TRUE/FALSE, on purpose. A boolean would need something
+// to come along and reset it overnight, which is exactly the trap roadmap #2
+// fell into. A date simply stops matching tomorrow. Column is created on first
+// use, same as CompletedAt, so this is safe to deploy before the column exists.
+function updateTaskToday(id, on) {
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName('TASKS');
+  var v = sheet.getDataRange().getValues();
+  var col = v[0].indexOf('Today');
+  if (col < 0) { col = v[0].length; sheet.getRange(1, col+1).setValue('Today'); }
+  var off = (on === false || String(on) === 'false' || String(on) === '0' || String(on) === '');
+  var want = off ? '' : today_();
+  for (var i = 1; i < v.length; i++) {
+    if (String(v[i][0]) === String(id)) {
+      sheet.getRange(i+1, col+1).setNumberFormat('@').setValue(want);
+      return {success:true, today:want};
+    }
+  }
+  return {error:'not found'};
+}
 
 // Set a task's Priority (col 6). Enum is exact-case: HIGH / MEDIUM / LOW.
 function updateTaskPriority(id, priority) {
@@ -436,12 +471,52 @@ function savePersonalItems(items) {
 }
 
 // ─── IDEAS ───────────────────────────────────────────────────
+// Hardened 2026-11-03 to the same shape as savePersonalItems: one document lock
+// and one setValues, instead of clearContents followed by a row-at-a-time
+// append. That old shape is what corrupted MAC_PERSONAL three times - two
+// writes landing together against a half-cleared sheet - and it was only ever
+// safe here because ideas were written rarely. The 11-02 archive feature
+// changed that, since archiving an idea is now a write.
+//
+// Body and Link live only in the sheet. The app does not send them when it
+// archives or reorders an idea, so they are read first and carried through, or
+// one archive tap would wipe every idea's text.
 function saveIdeas(ideas) {
-  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName('MAC_IDEAS');
-  sheet.clearContents();
-  sheet.appendRow(['ID','Text','Category','CreatedAt']);
-  ideas.forEach(function(i) { sheet.appendRow([i.id, i.text, i.category||'Film', i.createdAt||today_()]); });
-  return {success:true};
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(20000)) return {error:'busy, try again'};
+  try {
+    var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName('MAC_IDEAS');
+    var cur = sheet.getDataRange().getValues();
+    var hdr = cur.length ? cur[0] : [];
+    var bi = hdr.indexOf('Body'), li = hdr.indexOf('Link');
+    var prev = {};
+    for (var r = 1; r < cur.length; r++) {
+      var k = String(cur[r][0]).trim();
+      if (k) prev[k] = { body: bi >= 0 ? cur[r][bi] : '', link: li >= 0 ? cur[r][li] : '' };
+    }
+    // Dedupe by id, last write wins - defence in depth against a bad payload.
+    var seen = {}, clean = [];
+    ideas.forEach(function(i) {
+      if (!i || !i.id) return;
+      var key = String(i.id);
+      if (seen[key] === undefined) { seen[key] = clean.length; clean.push(i); }
+      else { clean[seen[key]] = i; }
+    });
+    var rows = [['ID','Text','Category','CreatedAt','Body','Link']];
+    clean.forEach(function(i) {
+      var p = prev[String(i.id)] || {};
+      rows.push([i.id, i.text, i.category||'Film', i.createdAt||today_(),
+                 plainCell_(keep_(i.body, p.body)),
+                 plainCell_(keep_(i.link, p.link))]);
+    });
+    sheet.clearContents();
+    sheet.getRange(1, 5, Math.max(rows.length, 2), 2).setNumberFormat('@');
+    sheet.getRange(1, 1, rows.length, 6).setValues(rows);
+    SpreadsheetApp.flush();
+    return {success:true, rows: clean.length};
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ─── PEOPLE ──────────────────────────────────────────────────

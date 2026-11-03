@@ -48,6 +48,23 @@ button{font-family:inherit;cursor:pointer;}input,select,textarea{font-family:inh
 .tmeta{display:flex;gap:8px;margin-top:3px;flex-wrap:wrap;}
 .tmeta span{font-size:13px;color:#c3bcab;}
 .sbadge{padding:2px 6px;border-radius:3px;font-size:13px;color:white;flex-shrink:0;white-space:nowrap;}
+/* Today star. Big enough to hit from the truck, and it must not open the task. */
+.tstar{background:none;border:none;padding:4px 6px 4px 0;margin:-4px 0 0 -4px;font-size:18px;line-height:1;color:#4a443c;cursor:pointer;flex-shrink:0;}
+.tstar.on{color:#f0a03f;}
+/* A collapsed project group under "Everything else". 100+ open tasks in one
+   flat list is unreadable; 15 project headers is scannable. */
+.gbtn{display:flex;align-items:center;gap:9px;width:100%;background:transparent;border:none;border-bottom:1px solid #2b2823;padding:13px 0;cursor:pointer;text-align:left;}
+.gdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.gname{flex:1;min-width:0;font-size:15px;letter-spacing:.1em;color:#f2eee4;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.gcnt{font-size:13px;color:#9a9384;white-space:nowrap;}
+.gchev{color:#9a9384;font-size:15px;}
+/* Dense list layout, the alternative to the tiles. */
+.lrow{display:flex;align-items:center;gap:9px;border-bottom:1px solid #2b2823;padding:10px 0;cursor:pointer;}
+.ldot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.ldesc{flex:1;min-width:0;font-size:15px;color:#f2eee4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ldesc.done{color:#c3bcab;text-decoration:line-through;}
+.lwho{font-size:13px;color:#9a9384;white-space:nowrap;}
+.laybar{display:flex;justify-content:flex-end;gap:6px;padding-bottom:12px;}
 .sacts{display:flex;gap:5px;flex-wrap:wrap;padding:8px 0 0 15px;}
 .sact{padding:4px 8px;border-radius:3px;border:none;font-size:13px;color:#c3bcab;background:#2b2823;cursor:pointer;}
 .sact.active{color:#15150f;font-weight:600;}
@@ -281,8 +298,13 @@ var S = {
   np:'MEDIUM',nc:'daily',nic:'Film',pp:null,addPerson:false,showAddProject:false,
   captureRoute:'MAC',se:null,sadd:false,tdDel:false,tdEditDesc:false,showArchive:false,
   triageId:null,triageDest:null,
-  showDoneProjects:false,showArchPersonal:false,showArchIdeas:false,showSite:false,_wake:''
+  showDoneProjects:false,showArchPersonal:false,showArchIdeas:false,showSite:false,_wake:'',
+  openGroup:{},layout:'tile'
 };
+// Layout choice is a per-device convenience, so localStorage is the right home
+// for it. Wrapped because a private window or blocked site data makes these throw.
+try{var _ly=localStorage.getItem('sos_layout');if(_ly==='list'||_ly==='tile')S.layout=_ly;}catch(e){}
+function setLayout(v){S.layout=v;try{localStorage.setItem('sos_layout',v);}catch(e){}render();}
 var PC={HIGH:'#e0553f',MEDIUM:'#f0a03f',LOW:'#c3bcab'};
 // Status colours. Covers task statuses and every project status actually in use.
 // AWAITING PAYMENT and COLLECTIONS are deliberately loud - they mean money owed.
@@ -879,6 +901,7 @@ function rTaskDetail(){
   h+='<div class="td-meta"><div><div class="td-mlabel">Assigned</div><div class="td-mval">'+esc(String(t.AssignedTo||'-'))+'</div></div></div>';
   h+='<div class="td-slabel">Status</div><div class="sacts" style="padding:0">'+STATUSES.map(function(s){return'<button class="sact'+(t.Status===s?' active':'')+'" style="'+(t.Status===s?'background:'+SC[s]:'')+'" onclick="setTS(\''+t.ID+'\',\''+s+'\')">'+s+'</button>';}).join('')+'</div>';
   h+='<div class="td-slabel" style="margin-top:16px">Priority</div><div class="sacts" style="padding:0">'+PRIOS.map(function(p){return'<button class="sact'+(t.Priority===p?' active':'')+'" style="'+(t.Priority===p?'background:'+PC[p]:'')+'" onclick="setTP(\''+t.ID+'\',\''+p+'\')">'+p+'</button>';}).join('')+'</div>';
+  h+='<div class="td-slabel" style="margin-top:16px">Today</div><div class="sacts" style="padding:0"><button class="sact'+(isToday(t)?' active':'')+'" style="'+(isToday(t)?'background:#f0a03f;color:#1a1a18':'')+'" onclick="setTD(\''+t.ID+'\',event)">'+(isToday(t)?'★ ON TODAY':'☆ ADD TO TODAY')+'</button></div>';
   h+='<div class="td-slabel" style="margin-top:16px">Assigned to</div>';
   h+='<div class="frow"><select class="fsel" id="ta-'+t.ID+'" style="flex:1">'+assigneeOptions(String(t.AssignedTo||''))+'</select><button class="bcan" onclick="saveTaskAssignee(\''+t.ID+'\')">Reassign</button></div>';
   h+='<div class="td-slabel" style="margin-top:18px">Notes</div>';
@@ -960,16 +983,52 @@ function addProjectForm(){
   return'<div class="fbox" style="margin-bottom:12px"><input class="finput" id="np-name" placeholder="Project name" autofocus><input class="finput" id="np-client" placeholder="Client"><input class="finput" id="np-location" placeholder="Location"><div class="frow"><select class="fsel" id="np-status"><option>NEW</option><option>IN PROGRESS</option><option>PLANNING</option><option>ON HOLD</option></select><input class="fsel" id="np-budget" type="number" placeholder="Budget $" style="flex:1"><input class="fsel" id="np-permit" placeholder="Permit #" style="flex:1"></div><div class="facts"><button class="bprim" onclick="subProject()">Create</button><button class="bcan" onclick="S.showAddProject=false;render()">Cancel</button></div></div>';
 }
 
+// The owner's TODAY.
+//
+// It used to render every HIGH task and then every open task underneath, so
+// HIGH items appeared twice and the screen ran to about 150 rows against 107
+// open tasks. Worse, 44 of those 107 are marked HIGH, because priority got used
+// to mean "this matters" rather than "this is next" - so sorting by priority
+// barely moved anything and the view could not say what today was.
+//
+// Now the Today column says it. Everything not picked for today falls into
+// collapsed per-project groups, which is the difference between a wall and a
+// list you can read at a stoplight.
 function rToday(){
   var own=S.user.role==='owner';var h='';
   if(own){
-    var hi=S.tasks.filter(function(t){return t.Priority==='HIGH'&&t.Status!=='DONE';});
-    h+=sl('High Priority',hi.length);
-    if(!hi.length)h+='<div class="empty">No high priority tasks</div>';
-    hi.forEach(function(t){h+=tiSimple(t,true);});
-    var all=S.tasks.filter(function(t){return t.Status!=='DONE';}).sort(function(a,b){return PO[a.Priority]-PO[b.Priority];});
-    h+=sl('All Open',all.length,'margin-top:20px');
-    all.forEach(function(t){h+=tiSimple(t,true);});
+    h+=layBar();
+    var open=S.tasks.filter(function(t){return t.Status!=='DONE';});
+    var byPrio=function(a,b){return PO[a.Priority]-PO[b.Priority];};
+    var td=open.filter(isToday).sort(byPrio);
+    var prog=open.filter(function(t){return !isToday(t)&&t.Status==='IN PROGRESS';}).sort(byPrio);
+    var rest=open.filter(function(t){return !isToday(t)&&t.Status!=='IN PROGRESS';});
+
+    h+=sl('Today',td.length);
+    if(!td.length)h+='<div class="empty">Nothing picked for today. Tap a star to add something.</div>';
+    td.forEach(function(t){h+=ti(t,true);});
+
+    if(prog.length){
+      h+=sl('In progress',prog.length,'margin-top:20px');
+      prog.forEach(function(t){h+=ti(t,true);});
+    }
+
+    h+=sl('Everything else',rest.length,'margin-top:20px');
+    var groups={};
+    rest.forEach(function(t){var k=String(t.Project||'');(groups[k]=groups[k]||[]).push(t);});
+    var pname=function(k){var p=S.projects.find(function(x){return String(x.ID)===k;});return String((p&&p.Name)||k||'No project');};
+    Object.keys(groups).sort(function(a,b){return pname(a).localeCompare(pname(b));}).forEach(function(k){
+      var pr=S.projects.find(function(p){return String(p.ID)===k;});
+      var list=groups[k].sort(byPrio);
+      var nhi=list.filter(function(t){return t.Priority==='HIGH';}).length;
+      var opn=!!S.openGroup[k];
+      h+='<button class="gbtn" onclick="togG(\''+k.replace(/'/g,"\\'")+'\')">'
+        +'<span class="gdot" style="background:'+esc(String((pr&&pr.Color)||'#c3bcab'))+'"></span>'
+        +'<span class="gname">'+esc(pname(k))+'</span>'
+        +'<span class="gcnt">'+list.length+(nhi?' \u00b7 '+nhi+' high':'')+'</span>'
+        +'<span class="gchev">'+(opn?'\u2304':'\u203a')+'</span></button>';
+      if(opn)list.forEach(function(t){h+=ti(t,false);});
+    });
   }else{
     h+=rCrewDay(S.user.name,false);
   }
@@ -1052,10 +1111,28 @@ function restoreTask(id){
   apiCall({action:'restoreTask',id:id});
 }
 
+// A task is "for today" when its Today cell holds today's date. It is a date and
+// not a flag on purpose: yesterday's picks stop matching at midnight on their
+// own, so nothing has to run overnight to clear them. Same trick as LastDone.
+function isToday(t){return String((t&&t.Today)||'')===todayStr();}
+function starBtn(t){
+  return'<button class="tstar'+(isToday(t)?' on':'')+'" onclick="setTD(\''+String(t.ID).replace(/'/g,"\\'")+'\',event)" title="'+(isToday(t)?'Remove from today':'Add to today')+'">'+(isToday(t)?'\u2605':'\u2606')+'</button>';
+}
+// Pick tiles or the dense list. Everything that renders a task goes through here
+// so the two layouts can never drift apart.
+function ti(t,sp){return S.layout==='list'?tiList(t):tiSimple(t,sp);}
+function tiList(t){
+  return'<div class="lrow">'+starBtn(t)+'<span class="ldot" style="background:'+(PC[t.Priority]||'#c3bcab')+'"></span><span class="ldesc'+(t.Status==='DONE'?' done':'')+'" onclick="openTask(\''+String(t.ID).replace(/'/g,"\\'")+'\')">'+esc(String(t.Description||''))+'</span><span class="lwho">'+esc(String(t.AssignedTo||''))+'</span></div>';
+}
+function togG(k){S.openGroup[k]=!S.openGroup[k];render();}
+function layBar(){
+  return'<div class="laybar">'+ch('Tiles',S.layout==='tile',"setLayout('tile')")+ch('List',S.layout==='list',"setLayout('list')")+'</div>';
+}
+
 function tiSimple(t,sp){
   var pr=S.projects.find(function(p){return String(p.ID)===String(t.Project);});
   var np=notePreview(t.Notes);
-  return'<div class="titem"><div class="trow" onclick="openTask(\''+t.ID+'\')"><div class="pdot" style="background:'+(PC[t.Priority]||'#c3bcab')+'"></div><div class="tbody">'+(sp&&pr?'<div style="font-size:13px;color:'+esc(String(pr.Color||'#c3bcab'))+';letter-spacing:.12em;text-transform:uppercase;margin-bottom:2px">'+esc(String(pr.Name))+'</div>':'')+'<div class="tdesc'+(t.Status==='DONE'?' done':'')+'">'+esc(String(t.Description||''))+'</div>'+(np?'<div class="tnote">'+esc(np)+'</div>':'')+'<div class="tmeta"><span>→ '+esc(String(t.AssignedTo||''))+'</span><span style="color:#9a9384">'+esc(String(t.Trade||''))+'</span></div></div><span class="sbadge" style="background:'+(SC[t.Status]||'#3d3831')+';color:'+onColor(SC[t.Status]||'#3d3831')+'">'+esc(String(t.Status||''))+'</span><span class="tchev">›</span></div></div>';
+  return'<div class="titem"><div class="trow" onclick="openTask(\''+String(t.ID).replace(/'/g,"\\'")+'\')">'+starBtn(t)+'<div class="pdot" style="background:'+(PC[t.Priority]||'#c3bcab')+'"></div><div class="tbody">'+(sp&&pr?'<div style="font-size:13px;color:'+esc(String(pr.Color||'#c3bcab'))+';letter-spacing:.12em;text-transform:uppercase;margin-bottom:2px">'+esc(String(pr.Name))+'</div>':'')+'<div class="tdesc'+(t.Status==='DONE'?' done':'')+'">'+esc(String(t.Description||''))+'</div>'+(np?'<div class="tnote">'+esc(np)+'</div>':'')+'<div class="tmeta"><span>→ '+esc(String(t.AssignedTo||''))+'</span><span style="color:#9a9384">'+esc(String(t.Trade||''))+'</span></div></div><span class="sbadge" style="background:'+(SC[t.Status]||'#3d3831')+';color:'+onColor(SC[t.Status]||'#3d3831')+'">'+esc(String(t.Status||''))+'</span><span class="tchev">›</span></div></div>';
 }
 
 function atfSimple(){
@@ -1152,6 +1229,22 @@ function setTP(id,pr){
       alert('Priority not saved: '+r.error+(/Unknown action/i.test(r.error)?'\n\nThe backend needs a New version deploy.':''));
     }
   }).catch(function(){t.Priority=prev;render();alert('Priority not saved - network error.');});
+}
+// Add a task to today, or take it off. Writes optimistically and reverts with a
+// message if the write fails, same as setTP - updateTaskToday needs the backend
+// on a New version to exist at all.
+function setTD(id,ev){
+  if(ev&&ev.stopPropagation){ev.stopPropagation();ev.preventDefault();}
+  var t=S.tasks.find(function(x){return String(x.ID)===String(id);});
+  if(!t)return;
+  var prev=String(t.Today||''),on=!isToday(t);
+  t.Today=on?todayStr():'';render();
+  apiCall({action:'updateTaskToday',id:id,on:on?'true':'false'}).then(function(r){
+    if(r&&r.error){
+      t.Today=prev;render();
+      alert('Today not saved: '+r.error+(/Unknown action/i.test(r.error)?'\n\nThe backend needs a New version deploy.':''));
+    }
+  }).catch(function(){t.Today=prev;render();alert('Today not saved - network error.');});
 }
 function setTS(id,st){
   var t=S.tasks.find(function(x){return String(x.ID)===String(id);});
