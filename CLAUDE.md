@@ -55,7 +55,7 @@ format (it would make them guessable).
   `updateTaskStatus, updateTaskPriority, updateTaskNotes, updateTaskDescription, deleteTask,
   restoreTask, updateTaskAssignee, toggleShoppingStatus, addTask, addShoppingItem,
   updateScheduleEntry, addScheduleEntry, deleteScheduleEntry, savePersonalItems,
-  saveIdeas, addPerson, updateLastContact, updatePersonType, addVoiceEntry,
+  saveIdeas, updateTaskToday, addPerson, updateLastContact, updatePersonType, addVoiceEntry,
   processVoiceEntry, addProject, archiveDoneTasks` (owner only, `days` param, default 30).
 
 To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
@@ -87,6 +87,36 @@ To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
   `SCHEDULE_ARCHIVE`) before removing — nothing is hard-deleted.
 
 ## Current feature status (as of 2026-08-31)
+
+**THE TODAY FLAG - LIVE (frontend + backend Version 40, 2026-11-03 2:33 AM).**
+Mac opened the STRINGER tab and found "100 something things". He was right, and
+the view was worse than the data: it rendered every HIGH task and then every open
+task underneath, so HIGH items appeared twice and the screen ran to ~150 rows
+against 107 open tasks. On top of that **44 of the 107 are marked HIGH** - priority
+had been used to mean "this matters", not "this is next" - so sorting by priority
+moved almost nothing.
+
+- **TASKS col 14 `Today` holds a DATE, not TRUE/FALSE.** A boolean would need
+  something to clear it overnight, which is the exact trap roadmap #2 fell into. A
+  date just stops matching tomorrow. **Do not "fix" this into a flag.** The column
+  is auto-created on first use, same as `CompletedAt`.
+- New action `updateTaskToday(id, on)`. Anything but `false`/`0`/empty sets today.
+  `getAppData_` runs `Today` through `plainCell_` so a column that loses its `@`
+  format and comes back as a Date still compares correctly.
+- TODAY is now **Today / In progress / Everything else**, with Everything else
+  collapsed into per-project groups carrying a count and a high count.
+- A star on each row and a button on task detail toggle the flag. Optimistic write,
+  reverts with a message on failure.
+- **Tiles/List layout toggle**, remembered per device in `localStorage` key
+  `sos_layout`.
+- Verified: 21 backend logic checks against stubbed Apps Script objects, 23 checks
+  in Chromium, and a live API probe confirming all 107 tasks carry `Today` as a
+  string. Backend deployed by Claude driving the Apps Script editor in Chrome; Mac
+  did not touch it.
+
+**Who sets the flag:** Mac's intent is that he and Hazel decide together what
+tomorrow looks like and mark those rows, with everything else lining up behind it.
+The star is for in-the-moment changes, not the main path.
 
 **THE DAY PLAN — LIVE (frontend + backend Version 39, 2026-11-02 11:44 PM).**
 The MAC tab is now the day, not a list of responsibilities. Backend deployed by
@@ -275,9 +305,9 @@ distinct ids** (`pd5` x6, `pd1`/`pd3`/`pd4` x5) and had **destroyed three rows
 outright** — `pd7` Guitar practice, `pd9` Creative work or drawing, `pd12` Nina Day.
 Fix (in the pending deploy): take a `LockService` document lock and write the whole
 block in ONE `setValues` call; the frontend also collapses duplicates on read via
-`dedupePersonal()`, so a dirty sheet can no longer reach the UI. `saveIdeas` still
-has the same unhardened shape but is written far less often — harden it if
-MAC_IDEAS ever shows the same symptom.
+`dedupePersonal()`, so a dirty sheet can no longer reach the UI. **`saveIdeas` got
+the same treatment on 2026-11-03** (Version 40) — document lock, one `setValues`,
+and Body/Link read first and carried through so an archive tap cannot blank them.
 The 09-02 clean-up restored the 3 lost rows, dropped `p3` and `p4` (Jul 25 originals
 restated by the Jul 29 `pd*` set: `p3` reworded `pd1`, and `pd2` already contains
 "property loop"), and reset the 12 rhythm rows to not-done. **Current state: 15 rows
@@ -308,16 +338,32 @@ with `p4`: its "min 2x" target for the morning property loop is not in `pd2`.
 
 ## MAC_IDEAS (idea vault)
 
-- `MAC_IDEAS` is **titles only** — 28 entries as of 2026-08-31 (was 12). Full
-  descriptions live in **`idea-vault-spark-lines.md`** in Drive, not in the sheet.
+- `MAC_IDEAS` holds 28 entries. It was **titles only** until 2026-11-03, when the
+  full descriptions were lifted out of **`idea-vault-spark-lines.md`** in Drive
+  into the new `Body` column. That doc is still the origin and still worth reading,
+  but the sheet is no longer a list of bare names.
 - Categories in use: `Film` (8), `Essay / TikTok` (8), `Art` (6),
   `Infrastructure` (2), `Venture` (3), `Music` (1). **`Venture` replaced the old
   `Business`** category. The filter chips **are** hardcoded in `index.html` as the
   `IC` array (~line 199) — adding a category to the sheet without adding it there
   leaves those ideas visible only under the "All" chip. `IC` was updated 2026-08-31.
 - IDs are `i1`..`i28`, `CreatedAt` is plain `YYYY-MM-DD`. The `saveIdeas` action
-  takes a JSON array in the `ideas` param and **rewrites the whole tab**
-  (`clearContents` + re-append header) — there is no per-row idea edit.
+  takes a JSON array in the `ideas` param and **rewrites the whole tab** — there
+  is no per-row idea edit.
+- **`Body` and `Link` added 2026-11-03.** `Body` holds the full idea text, `Link`
+  the origin chat or a Drive doc. All 28 bodies were populated on 11-03 from
+  `idea-vault-spark-lines.md`; 25 carry a link (Hazel Jones, Nina's World and
+  thatdopegirl have no single source). Longest body is ~1,900 chars.
+- **The creative tab is tiles now**, each opening a detail page with the full body,
+  an Edit box and an Open-the-source button.
+- **`ideasPayload()` is mandatory for any new `saveIdeas` caller.** `saveIdeas`
+  travels as a GET query string and 28 full bodies would blow the URL length, so
+  `ideasPayload()` strips every body and lets the backend carry them through from
+  the sheet. The one body being edited is the exception. Calling
+  `JSON.stringify(S.ideas)` instead will either truncate the request or wipe every
+  idea's text.
+- `rmI` is still defined, still unreachable from the UI, and is now doubly unsafe:
+  it hard-deletes AND skips the carry-through. Do not wire it up.
 
 ## Operational context (drives coordination)
 
@@ -406,6 +452,10 @@ short is fine; what didn't happen moves and everything behind it shifts. Build f
 that, not for a plan that scolds him.
 
 Four things block it today, in the order they have to be fixed:
+**Items 1 and 2 below are now SOLVED** — 1 by the wake stamp on 11-02, 2 by the
+TASKS `Today` column on 11-03. What is left of this list is 3 and 4, the calendar
+and the rhythm times.
+
 1. **Rhythm items never reset** (roadmap #2 above). Nothing flips `done` back, so a
    stale tick makes a whole day read complete. **Nothing else here works until this
    does.** Preferred fix: a `LastDone` date per row compared against today, not a
@@ -453,10 +503,6 @@ goals with milestones.
   writer and it stamps Source=`App`, i.e. typed in by hand. Mac's intent was Gemini
   on his Galaxy S26 -> Google Tasks -> a trigger pulls new items in -> he triages.
   That capture half was never built.
-- Harden `saveIdeas` with the same `LockService` document lock + single `setValues`
-  that `savePersonalItems` got on 09-02 — it still has the unhardened
-  `clearContents` + per-row append shape, and the 11-02 archive feature means ideas
-  now get written far more often than before.
 - Follow-ups Mac owns: confirm Alex Sanchez's jurisdiction; check with Arnold whether
   the two bee-caves concrete pours can have a weekend gap.
 
