@@ -75,6 +75,12 @@ button{font-family:inherit;cursor:pointer;}input,select,textarea{font-family:inh
 .pbadges{display:flex;gap:6px;align-items:center;}
 .pstat{margin-top:5px;}
 .pstat .badge{font-size:11px;letter-spacing:.06em;}
+.wakebox{border:1px dashed #3d3831;border-radius:4px;padding:22px 16px;text-align:center;margin-bottom:16px;}
+.waketitle{font-size:19px;color:#f2eee4;margin-bottom:5px;}
+.wakesub{font-size:14px;color:#c3bcab;margin-bottom:16px;}
+.wakebtn{width:100%;padding:14px;font-size:17px;}
+.dayhdr{display:flex;align-items:center;justify-content:space-between;font-size:14px;color:#c3bcab;margin-bottom:10px;}
+.daylink{background:transparent;border:none;color:#9a9384;font-size:14px;text-decoration:underline;cursor:pointer;padding:0;}
 .badge{padding:2px 6px;border-radius:3px;font-size:13px;color:white;}
 .proj-budget{background:#1a1a18;padding:12px 16px;border-bottom:1px solid #3d3831;display:flex;gap:16px;flex-wrap:wrap;}
 .proj-budget-item{display:flex;flex-direction:column;gap:2px;}
@@ -275,7 +281,7 @@ var S = {
   np:'MEDIUM',nc:'daily',nic:'Film',pp:null,addPerson:false,showAddProject:false,
   captureRoute:'MAC',se:null,sadd:false,tdDel:false,tdEditDesc:false,showArchive:false,
   triageId:null,triageDest:null,
-  showDoneProjects:false,showArchPersonal:false,showArchIdeas:false
+  showDoneProjects:false,showArchPersonal:false,showArchIdeas:false,showSite:false,_wake:''
 };
 var PC={HIGH:'#e0553f',MEDIUM:'#f0a03f',LOW:'#c3bcab'};
 // Status colours. Covers task statuses and every project status actually in use.
@@ -292,6 +298,53 @@ function projDone(p){return !!PDONE[String(p.Status||'').toUpperCase()];}
 // the original category survives and the row is restorable. No schema change.
 function isArch(x){return /^archived:/i.test(String((x&&x.category)||''));}
 function baseCat(c){return String(c||'').replace(/^archived:/i,'');}
+
+// ─── DAY PLAN ────────────────────────────────────────────────
+// The day starts when Mac says it starts, not at a fixed hour. The wake stamp
+// lives in localStorage keyed by date, so it is per-device and needs no backend.
+// It also removes the need for an overnight reset job: a new date simply has no
+// stamp yet, and rhythm ticks are read from LastDone rather than a boolean that
+// nothing ever cleared.
+var DAYN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function wakeKey(){return 'sos_wake_'+todayStr();}
+function wakeGet(){try{return localStorage.getItem(wakeKey())||'';}catch(e){return S._wake||'';}}
+function wakeSet(){
+  var d=new Date(),v=('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2);
+  S._wake=v;try{localStorage.setItem(wakeKey(),v);}catch(e){}
+  render();
+}
+function wakeClear(){S._wake='';try{localStorage.removeItem(wakeKey());}catch(e){}render();}
+function wakeMins(){var w=wakeGet();if(!w)return null;var p=w.split(':');return (+p[0])*60+(+p[1]);}
+// Rhythm ticks reset daily off LastDone. Responsibilities are one-off, so they
+// keep using the plain done flag.
+function isDone(i){return isRhythm(i)?(String(i.lastDone||'')===todayStr()):!!i.done;}
+// Slot is minutes after wake, a CLOCK:HH:MM wall time, or a keyword.
+function slotOf(i){
+  var s=String(i.slot===undefined||i.slot===null?'':i.slot).trim().toUpperCase();
+  if(!s)return null;
+  if(s==='ANYTIME'||s==='ONSITE'||s==='ASNEEDED')return {kind:s};
+  var c=s.match(/^CLOCK:(\d{1,2}):(\d{2})$/);
+  if(c)return {kind:'CLOCK',abs:(+c[1])*60+(+c[2])};
+  if(/^\d+$/.test(s))return {kind:'REL',rel:+s};
+  return null;
+}
+// Blank Days means every day.
+function dayOK(i){
+  var d=String(i.days||'').trim();
+  if(!d)return true;
+  var t=DAYN[new Date().getDay()];
+  return d.split(/[,\s]+/).some(function(x){return x.toLowerCase().slice(0,3)===t.toLowerCase();});
+}
+function planRows(){
+  return dedupePersonal(S.personal).filter(function(i){
+    return isRhythm(i)&&!isArch(i)&&i.active!==false&&dayOK(i);
+  });
+}
+function fmtAbs(m){
+  m=((m%1440)+1440)%1440;
+  var h=Math.floor(m/60),mm=('0'+(m%60)).slice(-2),ap=h<12?'AM':'PM',hh=h%12;if(hh===0)hh=12;
+  return hh+':'+mm+' '+ap;
+}
 var CC={health:'#5d9b6e',daily:'#3f7cc4',personal:'#7a4a8c',service:'#e0553f',financial:'#f0a03f'};
 var IC=['Film','Essay / TikTok','Art','Infrastructure','Venture','Music','Other'];
 var PO={HIGH:0,MEDIUM:1,LOW:2};
@@ -412,18 +465,18 @@ function fmtHour(h,m){
   return hh+(m?':'+('0'+m).slice(-2):'')+' '+ap;
 }
 function rhItem(i){
-  var c=CC[i.category]||'#c3bcab';
+  var c=CC[baseCat(i.category)]||'#c3bcab',d=isDone(i);
   return'<div class="rhitem"><div class="catdot" style="background:'+c+';margin-top:8px"></div>'+
-    '<div class="rhbody"><div class="rhdesc'+(i.done?' done':'')+'">'+esc(i.description)+'</div>'+
-    '<div class="rhcat">'+esc(i.category)+'</div></div>'+
-    '<button class="chkbtn '+(i.done?'done':'undone')+'" onclick="togP(\''+i.id+'\')">'+(i.done?'✓':'○')+'</button></div>';
+    '<div class="rhbody"><div class="rhdesc'+(d?' done':'')+'">'+esc(i.description)+'</div>'+
+    '<div class="rhcat">'+esc(baseCat(i.category))+'</div></div>'+
+    '<button class="chkbtn '+(d?'done':'undone')+'" onclick="togP(\''+i.id+'\')">'+(d?'✓':'○')+'</button></div>';
 }
 function rRhythm(){
   var items=dedupePersonal(S.personal).filter(function(i){return isRhythm(i)&&!isArch(i);});
   var timed=[],anytime=[];
   items.forEach(function(i){var t=rhythmHour(i);if(t)timed.push({i:i,t:t});else anytime.push(i);});
   timed.sort(function(a,b){return (a.t.h*60+a.t.m)-(b.t.h*60+b.t.m);});
-  var open=items.filter(function(x){return !x.done;}).length;
+  var open=items.filter(function(x){return !isDone(x);}).length;
   var h='<div class="pad">';
   h+=sl('The Day',open+' open / '+items.length);
   if(!items.length)h+='<div class="empty">No rhythm items yet</div>';
@@ -559,15 +612,58 @@ function doTriage(id){
   apiCall({action:'processVoiceEntry',id:id});
 }
 
+// The MAC tab is now the day. Timed rhythm first, laid out from the wake stamp,
+// then the droppable anytime items, then work, then one-off responsibilities.
+// It is a framework for the day, not a scorecard - nothing here scolds.
 function rMac(){
-  // Rhythm items moved to their own tab - this is responsibilities only.
+  var h='<div class="pad">';
+  var wm=wakeMins();
+  if(wm===null){
+    h+='<div class="wakebox"><div class="waketitle">Ready when you are</div>'+
+       '<div class="wakesub">Tap when you are up and the day lays out from there.</div>'+
+       '<button class="bprim wakebtn" onclick="wakeSet()">Start my day</button></div>';
+  }else{
+    var rows=planRows(),timed=[],any=[],site=[];
+    rows.forEach(function(i){
+      var s=slotOf(i);
+      if(!s){any.push(i);return;}
+      if(s.kind==='REL')timed.push({i:i,abs:wm+s.rel});
+      else if(s.kind==='CLOCK')timed.push({i:i,abs:s.abs});
+      else if(s.kind==='ANYTIME')any.push(i);
+      else site.push(i);
+    });
+    timed.sort(function(a,b){return a.abs-b.abs;});
+    var left=timed.filter(function(t){return !isDone(t.i);}).length;
+    h+='<div class="dayhdr"><span>Up at '+fmtAbs(wm)+'</span>'+
+       '<button class="daylink" onclick="wakeClear()">reset</button></div>';
+    h+=sl('The Day',left+' left of '+timed.length);
+    timed.forEach(function(t){
+      h+='<div class="rhrow"><div class="rhtime">'+fmtAbs(t.abs)+'</div>'+
+         '<div class="rhitems">'+rhItem(t.i)+'</div></div>';
+    });
+    if(any.length){
+      h+=sl('Anytime',any.filter(function(i){return !isDone(i);}).length,'margin-top:20px');
+      h+='<div class="rhnote">On the list every day. Dropping one costs nothing.</div>';
+      any.forEach(function(i){h+=rhItem(i);});
+    }
+    if(site.length){
+      h+='<button class="addbtn" style="margin-top:16px" onclick="S.showSite=!S.showSite;render()">'+(S.showSite?'Hide':'Show')+' on site and as needed ('+site.length+')</button>';
+      if(S.showSite)site.forEach(function(i){h+=rhItem(i);});
+    }
+    var mine=S.tasks.filter(function(t){return t.Status!=='DONE'&&(t.AssignedTo==='Mac'||!t.AssignedTo);})
+                    .sort(function(a,b){return PO[a.Priority]-PO[b.Priority];});
+    h+=sl('Work',mine.length,'margin-top:20px');
+    if(!mine.length)h+='<div class="empty">Nothing open</div>';
+    mine.slice(0,8).forEach(function(t){h+=tiSimple(t,true);});
+    if(mine.length>8)h+='<div class="rhnote">'+(mine.length-8)+' more on the Stringer tab. Tasks carry no date yet, so this is priority order, not today order.</div>';
+  }
+  // Responsibilities: one-off, never reset, always visible under the day.
   var all=dedupePersonal(S.personal).filter(function(i){return !isRhythm(i);});
   var items=all.filter(function(i){return !isArch(i);});
   var arch=all.filter(isArch);
   var open=items.filter(function(i){return !i.done;});
   var done=items.filter(function(i){return i.done;});
-  var h='<div class="pad">';
-  h+=sl('Responsibilities',open.length);
+  h+=sl('Responsibilities',open.length,'margin-top:20px');
   if(!open.length)h+='<div class="empty">Nothing open</div>';
   open.forEach(function(i){h+=mi(i);});
   if(done.length){h+=sl('Done',done.length,'margin-top:20px');done.forEach(function(i){h+=mi(i);});}
@@ -1072,7 +1168,14 @@ function togSH(id){
 }
 function togP(id){
   var i=S.personal.find(function(x){return x.id===id;});
-  if(i)i.done=!i.done;render();
+  if(i){
+    var now=!isDone(i);
+    i.done=now;
+    // Rhythm items are daily, so the tick is a date, not a flag. That is what
+    // makes tomorrow start clean with no overnight job to run.
+    if(isRhythm(i))i.lastDone=now?todayStr():'';
+  }
+  render();
   apiCall({action:'savePersonalItems',items:JSON.stringify(S.personal)});
 }
 function togPP(id){S.pp=id;render();}
@@ -1143,7 +1246,9 @@ function subS(){
 
 function subP(){
   var i=document.getElementById('npt');if(!i||!i.value.trim())return;
-  var item={id:'p'+Date.now(),description:i.value.trim(),done:false,category:S.nc,createdAt:new Date().toISOString().slice(0,10)};
+  // New items are one-off responsibilities by default: no slot, so they land
+  // under Responsibilities rather than being dropped into the timed day.
+  var item={id:'p'+Date.now(),description:i.value.trim(),done:false,category:S.nc,createdAt:new Date().toISOString().slice(0,10),slot:'',days:'',active:true,lastDone:''};
   S.personal.push(item);S.ap=false;render();
   apiCall({action:'savePersonalItems',items:JSON.stringify(S.personal)});
 }

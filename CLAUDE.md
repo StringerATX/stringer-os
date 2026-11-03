@@ -88,6 +88,42 @@ To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
 
 ## Current feature status (as of 2026-08-31)
 
+**THE DAY PLAN — LIVE (frontend + backend Version 39, 2026-11-02 11:44 PM).**
+The MAC tab is now the day, not a list of responsibilities. Backend deployed by
+Claude driving the Apps Script editor in Chrome; Mac did not touch it.
+
+- **The day starts when Mac taps "Start my day", not at a fixed hour.** The wake
+  stamp is `localStorage` keyed `sos_wake_<YYYY-MM-DD>`, so it is per-device and
+  needs no backend. **This is also what killed roadmap #2:** a new date simply has
+  no stamp, so there is nothing to reset overnight and no trigger to miss.
+- **Rhythm ticks are a date, not a flag.** `isDone()` reads `LastDone === today`
+  for rhythm rows, so tomorrow starts clean. Responsibilities (`p*`) are one-off
+  and keep the plain `done` boolean. **Do not "fix" this by unifying them.**
+- **`Slot` holds minutes after wake** (a plain number), or `CLOCK:HH:MM` for a wall
+  time that does not move, or `ANYTIME` / `ONSITE` / `ASNEEDED`. `Days` blank means
+  daily, otherwise a day list like `Thu`. This replaces `rhythmHour()`, which
+  regexed the hour out of the description text and moved if the wording changed.
+  `rhythmHour` is still used by the old RHYTHM tab and is still fragile.
+- **`Active=FALSE` hides an item without deleting it.** Five supplement rows are
+  switched off because Mac stated 11/1 he is on nothing but Adderall. Flip them on
+  when he restarts. The point is that the day must not open with four failures.
+- `pd1` (8am wake anchor) retired via Active=FALSE - the wake stamp replaces it.
+  `pd5` reworded from "9:30am to noon" to "2.5 hours" since Slot now carries time.
+  `pd23` breakfast added (Blender First shake, or 2 eggs and avocado) at +105.
+- **The Work block is priority order, not today order**, and says so on screen.
+  TASKS still has no date column. Giving Mac's own tasks a date or Today flag is
+  the next real piece.
+- Verified in Chromium against the live data shape: timeline off a 9:00 wake put
+  Adderall 9:05 / walk 9:30 / kettlebell 10:15 / breakfast 10:45 / deep work 11:30,
+  inactive meds hidden, day-of-week rows correct for the actual weekday, stale
+  September `done` flags ignored, a LastDone of today reads done and an older one
+  resets, and responsibilities kept their flag. No page errors.
+
+**Where the live script actually is:** project `17fQKFbpZe6mdpNVl-ANQKD3LMz-AkUlFXNsI-1T6_L9WMdrioFItMqvt`,
+one of TWO projects both named "Untitled project" in script.google.com/home/my.
+The live one is the newer; the July one is the stale duplicate the Aug audit said
+to delete. Renaming the live one to "Stringer OS Backend" is still owed.
+
 **Hide-finished + archive everywhere — frontend LIVE (2026-11-02), no backend change.**
 - **Project tiles carry a status badge.** `SC` gained the project statuses actually
   in use (COMPLETE, CLOSED, CANCELLED, PLANNING, SCHEDULING, ONGOING, AWAITING
@@ -350,11 +386,10 @@ and the row stays readable in the Archive tab and restorable via "Recently delet
    the live `Code.gs` `TOKENS` map, **redeploy as a New version**, then update
    anywhere Mac's app bookmark embeds `?t=`. Crew/work tokens are unaffected unless
    rotated too. Do not do this without Mac, or he loses app access from his phone.
-2. **Rhythm items should reset each morning** — they are daily recurring by nature,
-   but nothing ever flips `done` back, so a stale August tick made the whole day read
-   as complete. The 09-02 clean-up reset them by hand. Needs a real mechanism: either
-   a dated last-completed column, or an Apps Script time trigger that clears `Done`
-   for `pd*` rows overnight. Until then they will silently go stale again.
+2. ~~**Rhythm items should reset each morning**~~ **SOLVED 2026-11-02.** No trigger
+   was needed in the end. Rhythm done-state is now `LastDone === today`, and the
+   day itself only exists once Mac taps the wake stamp, which is per-date. A missed
+   night cannot leave a stale tick because there is no nightly job to miss.
 3. **AI-assisted triage + connector** — the big one. Goal: Mac tells Claude
    ("Arnold's guys no-showed at bee-caves, slide it") and Claude proposes the shifts
    + conflicts before touching anything. Preferred delivery: a **connector (MCP)**
