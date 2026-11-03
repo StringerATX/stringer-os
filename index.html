@@ -1215,6 +1215,15 @@ function ideasPayload(keepBodyFor){
   }));
 }
 
+// Most idea links point at the origin chat, a few at a Drive doc. Say which,
+// so the button is not lying about where it goes.
+function linkBtn(i){
+  var u=String(i.link||'');
+  if(!u)return'';
+  var label=/claude\.ai/i.test(u)?'Open the origin chat':'Open the doc';
+  return'<a class="td-attach" href="'+esc(u)+'" target="_blank" rel="noopener">'+label+'</a>';
+}
+
 function rIdeaDetail(){
   var i=S.ideas.find(function(x){return String(x.id)===String(S.ideaPage);});
   if(!i)return'<div class="pad"><div class="empty">Idea not found</div></div>';
@@ -1228,10 +1237,10 @@ function rIdeaDetail(){
     h+='<div class="facts"><button class="bprim" onclick="saveIdeaBody(\''+id+'\')">Save</button><button class="bcan" onclick="S.ideaEdit=false;render()">Cancel</button></div>';
   }else if(String(i.body||'').trim()){
     h+='<div class="id-read">'+esc(String(i.body))+'</div>';
-    h+='<div class="facts"><button class="bcan" onclick="S.ideaEdit=true;render()">Edit</button>'+(i.link?'<a class="td-attach" href="'+esc(String(i.link))+'" target="_blank" rel="noopener">Open the doc</a>':'')+'</div>';
+    h+='<div class="facts"><button class="bcan" onclick="S.ideaEdit=true;render()">Edit</button>'+linkBtn(i)+'</div>';
   }else{
     h+='<div class="empty">Nothing written down for this one yet.</div>';
-    h+='<div class="facts"><button class="bprim" onclick="S.ideaEdit=true;render()">Write it down</button>'+(i.link?'<a class="td-attach" href="'+esc(String(i.link))+'" target="_blank" rel="noopener">Open the doc</a>':'')+'</div>';
+    h+='<div class="facts"><button class="bprim" onclick="S.ideaEdit=true;render()">Write it down</button>'+linkBtn(i)+'</div>';
   }
   return h+'</div>';
 }
