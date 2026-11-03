@@ -139,6 +139,19 @@ function getAppData_(user) {
   // the same reasoning as LastDone on the rhythm rows. Normalized here because
   // Sheets hands back a Date object if the column ever loses its '@' format.
   tasks.forEach(function(t) { t.Today = plainCell_(t.Today); });
+  // Budget and Actual are owner-only, and they are removed from the DATA rather
+  // than hidden in the UI. That distinction matters here: the token is the only
+  // security on this app and the exec URL is already public in index.html, so
+  // anything left in the payload can be read by opening the API directly. Hiding
+  // a field in the frontend hides it from nobody. Mac decided 2026-11-03 that
+  // crew see every project field except the money.
+  if (user.role !== 'owner') {
+    projects = projects.map(function(p) {
+      var o = {};
+      for (var k in p) { if (k !== 'Budget' && k !== 'Actual') o[k] = p[k]; }
+      return o;
+    });
+  }
   // Per-person task view: everyone except the owner sees only their own tasks.
   // Crew also see tasks assigned to the generic "Crew". Tracy (work) sees only her own.
   if (user.role !== 'owner') {

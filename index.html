@@ -382,7 +382,10 @@ function fmt$(n){if(!n&&n!==0)return'—';return'$'+Number(n).toLocaleString();}
 function daysSince(d){if(!d)return 999;return Math.floor((new Date()-new Date(d))/(864e5));}
 function contactColor(d){var n=daysSince(d);return n<7?'#5d9b6e':n<14?'#f0a03f':'#e0553f';}
 function assigneeNames(){
-  var crew=['Mac','Christian','Mitchell','Tracy'];
+  // Crew first and on purpose. A task assigned to Crew reaches Christian and
+  // Mitchell both, and whoever gets to it first takes it. That is the common
+  // case, so it is the default in the pickers below.
+  var crew=['Crew','Mac','Christian','Mitchell','Tracy'];
   (S.people||[]).forEach(function(p){var t=String(p.Type||'').toLowerCase();if((t==='sub'||t==='vendor'||t==='crew')&&crew.indexOf(String(p.Name))<0)crew.push(String(p.Name));});
   return crew;
 }
@@ -566,7 +569,7 @@ function triageForm(v,clean){
   if(!d)return'';
   var projOpts=S.projects.map(function(p){return'<option value="'+esc(String(p.ID))+'">'+esc(String(p.Name))+'</option>';}).join('');
   var tradeOpts=S.trades.map(function(t){return'<option>'+esc(t)+'</option>';}).join('');
-  var whoSel='<select class="fsel" id="tr-who-'+id+'">'+assigneeOptions('Mac')+'</select>';
+  var whoSel='<select class="fsel" id="tr-who-'+id+'">'+assigneeOptions('Crew')+'</select>';
   var h='<div class="fbox" style="margin-top:8px">';
   if(d==='task'){
     h+='<textarea class="ftarea" id="tr-desc-'+id+'" rows="2">'+esc(clean)+'</textarea>';
@@ -734,7 +737,7 @@ function rStringer(){
   if(S.taskPage) return rTaskDetail();
   if(S.projectPage) return rProjectDetail();
   var own=S.user.role==='owner';
-  var h=own?'<div class="subnav">'+sb('today','TODAY')+sb('sched','SCHEDULE')+sb('projects','PROJECTS')+sb('crew','CREW')+sb('shopping','SHOPPING')+'</div>':'<div class="subnav">'+sb('today','MY DAY')+sb('sched','SCHEDULE')+sb('shopping','SHOPPING')+'</div>';
+  var h=own?'<div class="subnav">'+sb('today','TODAY')+sb('sched','SCHEDULE')+sb('projects','PROJECTS')+sb('crew','CREW')+sb('shopping','SHOPPING')+'</div>':'<div class="subnav">'+sb('today','MY DAY')+sb('sched','SCHEDULE')+sb('projects','PROJECTS')+sb('shopping','SHOPPING')+'</div>';
   h+='<div class="pad">';
   if(S.sv==='today')h+=rToday();
   else if(S.sv==='sched')h+=rSchedule();
@@ -814,7 +817,7 @@ function schedItem(e,own){
 }
 
 function schedAddForm(){
-  return'<div class="fbox"><input class="finput" id="sa-date" placeholder="Date (2026-08-03)" autofocus><div class="frow"><select class="fsel" id="sa-person">'+assigneeOptions('Mac')+'</select><input class="fsel" id="sa-start" placeholder="8:00 AM" style="flex:1"><input class="fsel" id="sa-end" placeholder="4:00 PM" style="flex:1"></div><input class="finput" id="sa-loc" placeholder="Location"><select class="fsel" id="sa-proj" style="margin-bottom:10px">'+S.projects.map(function(p){return'<option value="'+p.ID+'">'+esc(String(p.Name))+'</option>';}).join('')+'</select><textarea class="ftarea" id="sa-notes" rows="2" placeholder="Notes"></textarea><div class="facts"><button class="bprim" onclick="subSE()">Add</button><button class="bcan" onclick="S.sadd=false;render()">Cancel</button></div></div>';
+  return'<div class="fbox"><input class="finput" id="sa-date" placeholder="Date (2026-08-03)" autofocus><div class="frow"><select class="fsel" id="sa-person">'+assigneeOptions('Crew')+'</select><input class="fsel" id="sa-start" placeholder="8:00 AM" style="flex:1"><input class="fsel" id="sa-end" placeholder="4:00 PM" style="flex:1"></div><input class="finput" id="sa-loc" placeholder="Location"><select class="fsel" id="sa-proj" style="margin-bottom:10px">'+S.projects.map(function(p){return'<option value="'+p.ID+'">'+esc(String(p.Name))+'</option>';}).join('')+'</select><textarea class="ftarea" id="sa-notes" rows="2" placeholder="Notes"></textarea><div class="facts"><button class="bprim" onclick="subSE()">Add</button><button class="bcan" onclick="S.sadd=false;render()">Cancel</button></div></div>';
 }
 
 function togSE(id){S.se=S.se===id?null:id;render();}
@@ -864,22 +867,25 @@ function rProjectDetail(){
   var actual=proj.Actual?Number(proj.Actual):0;
   var balance=budget-actual;
   var h='';
+  // Complete lives inside the money strip for the owner. Crew have no Budget
+  // at all, so it gets its own strip rather than disappearing with the dollars.
+  if(!budget&&proj.PercentComplete){h+='<div class="proj-budget"><div class="proj-budget-item"><div class="proj-budget-label">Complete</div><div class="proj-budget-val">'+esc(String(proj.PercentComplete))+'</div></div></div>';}
   if(budget){h+='<div class="proj-budget"><div class="proj-budget-item"><div class="proj-budget-label">Budget</div><div class="proj-budget-val">'+fmt$(budget)+'</div></div><div class="proj-budget-item"><div class="proj-budget-label">Actual</div><div class="proj-budget-val">'+fmt$(actual)+'</div></div><div class="proj-budget-item"><div class="proj-budget-label">Balance</div><div class="proj-budget-val '+(balance>=0?'green':'red')+'">'+fmt$(balance)+'</div></div>'+(proj.PercentComplete?'<div class="proj-budget-item"><div class="proj-budget-label">Complete</div><div class="proj-budget-val">'+esc(String(proj.PercentComplete))+'</div></div>':'')+'</div>';}
   var meta=[];
   if(proj.Status)meta.push('<span class="status-pill" style="background:'+(SC[String(proj.Status)]||'#9a9384')+'">'+esc(String(proj.Status))+'</span>');
   if(proj.PermitNum)meta.push('<span style="font-size:13px;color:#c3bcab">Permit: '+esc(String(proj.PermitNum))+'</span>');
   if(meta.length)h+='<div class="proj-status">'+meta.join('')+'</div>';
-  h+='<div class="pad">';
+  h+='<div class="pad">'+layBar();
   if(trades.length>1){h+='<div class="chips">'+ch('All',S.tradeFilter==='all',"setTF('all')");trades.forEach(function(t){h+=ch(t,S.tradeFilter===t,"setTF('"+t+"')");});h+='</div>';}
   h+=sl('Tasks (open)',open.length);
   if(!open.length)h+='<div class="empty">No open tasks</div>';
-  open.forEach(function(t){h+=tiDetail(t);});
+  open.forEach(function(t){h+=tiD(t);});
   h+=S.at==='detail'?atfDetail():'<button class="addbtn" onclick="startAT(\'detail\')">+ Add task</button>';
   var needed=projMats.filter(function(s){return s.Status!=='BOUGHT';});
   var bought=projMats.filter(function(s){return s.Status==='BOUGHT';});
   h+=sl('Materials',needed.length,'margin-top:20px');
   if(!needed.length)h+='<div class="empty">No materials needed</div>';
-  needed.forEach(function(s){h+=shiFull(s);});
+  needed.forEach(function(s){h+=shX(s);});
   if(bought.length)h+='<div style="font-size:14px;color:#9a9384;padding:8px 0">+ '+bought.length+' bought</div>';
   h+=S.as?asfFull():'<button class="addbtn" onclick="startAS()">+ Add material</button>';
   return h+'</div>';
@@ -964,7 +970,7 @@ function shiFull(s){
 }
 
 function atfDetail(){
-  return'<div class="fbox"><input class="finput" id="ntd" placeholder="Task description..." autofocus><div class="frow"><select class="fsel" id="nttr">'+S.trades.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select><select class="fsel" id="nta">'+assigneeOptions('Mac')+'</select>'+['HIGH','MEDIUM','LOW'].map(function(p){return'<button class="bpill" onclick="setNP(\''+p+'\')" style="background:'+(S.np===p?PC[p]:'#2b2823')+';color:'+(S.np===p?'white':'#c3bcab')+'">'+p+'</button>';}).join('')+'</div><div class="facts"><button class="bprim" onclick="subT()">Add Task</button><button class="bcan" onclick="canAT()">Cancel</button></div></div>';
+  return'<div class="fbox"><input class="finput" id="ntd" placeholder="Task description..." autofocus><div class="frow"><select class="fsel" id="nttr">'+S.trades.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select><select class="fsel" id="nta">'+assigneeOptions('Crew')+'</select>'+['HIGH','MEDIUM','LOW'].map(function(p){return'<button class="bpill" onclick="setNP(\''+p+'\')" style="background:'+(S.np===p?PC[p]:'#2b2823')+';color:'+(S.np===p?'white':'#c3bcab')+'">'+p+'</button>';}).join('')+'</div><div class="facts"><button class="bprim" onclick="subT()">Add Task</button><button class="bcan" onclick="canAT()">Cancel</button></div></div>';
 }
 
 function asfFull(){
@@ -972,7 +978,10 @@ function asfFull(){
 }
 
 function rProjectList(){
-  var h=S.showAddProject?addProjectForm():'<button class="addbtn" style="margin-bottom:12px" onclick="S.showAddProject=true;render()">+ Add Project</button>';
+  var own=S.user.role==='owner';
+  var h=layBar();
+  // Only the owner creates projects. Crew read them and add tasks into them.
+  h+=own?(S.showAddProject?addProjectForm():'<button class="addbtn" style="margin-bottom:12px" onclick="S.showAddProject=true;render()">+ Add Project</button>'):'';
   var fin=S.projects.filter(projDone);
   var show=S.showDoneProjects?S.projects:S.projects.filter(function(p){return !projDone(p);});
   if(fin.length)h+='<div class="chips">'+ch((S.showDoneProjects?'Hide':'Show')+' finished ('+fin.length+')',S.showDoneProjects,'S.showDoneProjects=!S.showDoneProjects;render()')+'</div>';
@@ -983,6 +992,10 @@ function rProjectList(){
     var st=String(p.Status||'').toUpperCase();
     var sbg=SC[st]||'#9a9384';
     var stb=st?'<span class="badge" style="background:'+sbg+';color:'+onColor(sbg)+'">'+esc(st)+'</span>':'';
+    if(S.layout==='list'){
+      h+=lrow("openProject('"+String(p.ID).replace(/'/g,"\\'")+"')",esc(String(p.Color||'#3f7cc4')),esc(String(p.Name||'')),(st?esc(st):'')+(op.length?' \u00b7 '+op.length+' open':''),projDone(p));
+      return;
+    }
     h+='<div class="pcard" onclick="openProject(\''+p.ID+'\')"><button class="phdr"><div class="pbar" style="background:'+esc(String(p.Color||'#3f7cc4'))+'"></div><div class="pinfo"><div class="pname">'+esc(String(p.Name||''))+'</div><div class="psub">'+esc(String(p.Client||''))+' · '+esc(String(p.Location||''))+'</div><div class="pstat">'+stb+'</div></div><div class="pbadges">'+(hi.length?'<span class="badge" style="background:#e0553f">'+hi.length+' high</span>':'')+(op.length?'<span class="badge" style="background:#9a9384">'+op.length+' open</span>':'')+'<span style="color:#c3bcab;font-size:17px">›</span></div></button></div>';
   });
   if(!show.length)h+='<div class="empty">No live projects</div>';
@@ -1135,6 +1148,21 @@ function tiList(t){
   return'<div class="lrow">'+starBtn(t)+'<span class="ldot" style="background:'+(PC[t.Priority]||'#c3bcab')+'"></span><span class="ldesc'+(t.Status==='DONE'?' done':'')+'" onclick="openTask(\''+String(t.ID).replace(/'/g,"\\'")+'\')">'+esc(String(t.Description||''))+'</span><span class="lwho">'+esc(String(t.AssignedTo||''))+'</span></div>';
 }
 function togG(k){S.openGroup[k]=!S.openGroup[k];render();}
+// One dense row shape, reused by every list. Everything that renders a row goes
+// through a tiX() picker so the two layouts cannot drift apart.
+function lrow(onclick,dot,text,right,done){
+  return'<div class="lrow" onclick="'+onclick+'"><span class="ldot" style="background:'+dot+'"></span><span class="ldesc'+(done?' done':'')+'">'+text+'</span><span class="lwho">'+right+'</span></div>';
+}
+function tiD(t){return S.layout==='list'?tiList(t):tiDetail(t);}
+function shX(s){
+  if(S.layout!=='list')return shiFull(s);
+  var bt=s.Status==='BOUGHT';
+  return lrow("togSH('"+String(s.ID).replace(/'/g,"\\'")+"')",bt?'#5d9b6e':'#c3bcab',esc(String(s.Material||s.Description||'')),esc(String(s.Vendor||'')),bt);
+}
+function iX(i){
+  if(S.layout!=='list')return iItem(i);
+  return lrow("openIdea('"+String(i.id).replace(/'/g,"\\'")+"')",'#f0a03f',esc(String(i.text||'')),esc(baseCat(i.category)),isArch(i));
+}
 function layBar(){
   return'<div class="laybar">'+ch('Tiles',S.layout==='tile',"setLayout('tile')")+ch('List',S.layout==='list',"setLayout('list')")+'</div>';
 }
@@ -1146,7 +1174,7 @@ function tiSimple(t,sp){
 }
 
 function atfSimple(){
-  return'<div class="fbox"><input class="finput" id="ntd" placeholder="Task description..." autofocus><div class="frow"><select class="fsel" id="ntp">'+S.projects.map(function(p){return'<option value="'+p.ID+'">'+esc(String(p.Name))+'</option>';}).join('')+'</select><select class="fsel" id="nttr">'+S.trades.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select><select class="fsel" id="nta">'+assigneeOptions('Mac')+'</select>'+['HIGH','MEDIUM','LOW'].map(function(p){return'<button class="bpill" onclick="setNP(\''+p+'\')" style="background:'+(S.np===p?PC[p]:'#2b2823')+';color:'+(S.np===p?'white':'#c3bcab')+'">'+p+'</button>';}).join('')+'</div><div class="facts"><button class="bprim" onclick="subT()">Add Task</button><button class="bcan" onclick="canAT()">Cancel</button></div></div>';
+  return'<div class="fbox"><input class="finput" id="ntd" placeholder="Task description..." autofocus><div class="frow"><select class="fsel" id="ntp">'+S.projects.map(function(p){return'<option value="'+p.ID+'">'+esc(String(p.Name))+'</option>';}).join('')+'</select><select class="fsel" id="nttr">'+S.trades.map(function(t){return'<option>'+t+'</option>';}).join('')+'</select><select class="fsel" id="nta">'+assigneeOptions('Crew')+'</select>'+['HIGH','MEDIUM','LOW'].map(function(p){return'<button class="bpill" onclick="setNP(\''+p+'\')" style="background:'+(S.np===p?PC[p]:'#2b2823')+';color:'+(S.np===p?'white':'#c3bcab')+'">'+p+'</button>';}).join('')+'</div><div class="facts"><button class="bprim" onclick="subT()">Add Task</button><button class="bcan" onclick="canAT()">Cancel</button></div></div>';
 }
 
 function rShopping(){
@@ -1162,8 +1190,8 @@ function rShopping(){
   var bt=fil.filter(function(s){return s.Status==='BOUGHT';});
   h+=sl('Needed',nd.length);
   if(!nd.length)h+='<div class="empty">Nothing needed</div>';
-  nd.forEach(function(s){h+=shiFull(s);});
-  if(bt.length){h+=sl('Bought',bt.length,'margin-top:20px');bt.forEach(function(s){h+=shiFull(s);});}
+  nd.forEach(function(s){h+=shX(s);});
+  if(bt.length){h+=sl('Bought',bt.length,'margin-top:20px');bt.forEach(function(s){h+=shX(s);});}
   h+=S.as?asfFull():'<button class="addbtn" onclick="startAS()">+ Add to shopping list</button>';
   return h;
 }
@@ -1173,14 +1201,14 @@ function rCreative(){
   var live=S.ideas.filter(function(i){return !isArch(i);});
   var archI_=S.ideas.filter(isArch);
   var fil=S.icat==='all'?live:live.filter(function(i){return i.category===S.icat;});
-  var h='<div class="pad"><div class="chips">'+ch('All',S.icat==='all',"setIC('all')")+IC.map(function(c){return ch(c,S.icat===c,"setIC('"+c+"')");}).join('')+'</div>';
+  var h='<div class="pad">'+layBar()+'<div class="chips">'+ch('All',S.icat==='all',"setIC('all')")+IC.map(function(c){return ch(c,S.icat===c,"setIC('"+c+"')");}).join('')+'</div>';
   h+=S.ai?'<div class="fbox" style="margin-bottom:12px"><textarea class="ftarea" id="nit" rows="3" placeholder="Drop the idea here..." autofocus></textarea><div class="frow">'+IC.map(function(c){return'<button class="bpill" onclick="setNIC(\''+c+'\')" style="background:'+(S.nic===c?'#f0a03f':'#2b2823')+';color:'+(S.nic===c?'white':'#c3bcab')+';font-size:13px">'+c+'</button>';}).join('')+'</div><div class="facts"><button class="bprim" onclick="subI()">Capture</button><button class="bcan" onclick="canAI()">Cancel</button></div></div>':'<button class="addbtn addcreative" onclick="startAI()">✦ Capture an idea</button>';
   h+=sl(S.icat==='all'?'All Ideas':S.icat,fil.length);
   if(!fil.length)h+='<div class="empty">No ideas yet</div>';
-  fil.forEach(function(i){h+=iItem(i);});
+  fil.forEach(function(i){h+=iX(i);});
   if(archI_.length){
     h+='<button class="addbtn" style="margin-top:16px" onclick="S.showArchIdeas=!S.showArchIdeas;render()">'+(S.showArchIdeas?'Hide':'Show')+' archived ('+archI_.length+')</button>';
-    if(S.showArchIdeas)archI_.forEach(function(i){h+=iItem(i);});
+    if(S.showArchIdeas)archI_.forEach(function(i){h+=iX(i);});
   }
   return h+'</div>';
 }

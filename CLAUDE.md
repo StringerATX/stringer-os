@@ -88,6 +88,35 @@ To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
 
 ## Current feature status (as of 2026-08-31)
 
+**CREW SEE PROJECTS, MONEY STRIPPED SERVER-SIDE - LIVE (Version 41, 2026-11-03 4:55 PM).**
+Mac decided crew get every project field except the dollars.
+
+- **Budget and Actual are removed from the PAYLOAD in `getAppData_`, not hidden in
+  the UI.** This is the whole point and must not be "simplified" later. The token
+  is the only security on this app and the exec URL is public in `index.html`, so
+  a field left in the JSON is readable by anyone who opens the API directly. A
+  frontend-only hide would protect nobody.
+- Crew nav gained a PROJECTS sub-tab. They can open project detail and add tasks
+  into a project. They cannot add projects - that button is owner-gated.
+- `PercentComplete` used to live inside the money strip and would have vanished
+  with it, so it now renders in its own strip when Budget is absent.
+- Verified live against both tokens: owner gets 20 projects with Budget; Christian
+  gets the same 20 with keys Client, Color, ID, InspectionsReq, Jurisdiction,
+  Location, Name, PercentComplete, PermitNum, Status and no figure anywhere in the
+  payload.
+
+**Tiles/List toggle is now on every list, not just Today.** Project list, project
+detail tasks and materials, shopping, and creative all route through a `tiX()`
+style picker (`ti`, `tiD`, `shX`, `iX`) so the two layouts cannot drift. All of
+them share one `lrow()` row shape. Remembered per device in `localStorage`
+`sos_layout`. **Any new list must go through a picker, not call its tile renderer
+directly.**
+
+**`Crew` is now a real entry in `assigneeNames()` and the default in the add-task
+pickers.** A task assigned to Crew already reached both Christian and Mitchell
+through the server-side filter; what changed is that assigning to both is now the
+default and naming one person is the deliberate act.
+
 **THE TODAY FLAG - LIVE (frontend + backend Version 40, 2026-11-03 2:33 AM).**
 Mac opened the STRINGER tab and found "100 something things". He was right, and
 the view was worse than the data: it rendered every HIGH task and then every open
