@@ -89,7 +89,12 @@ To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
 
 ## Current feature status (as of 2026-08-31)
 
-**MATERIAL DETAIL PAGE + PROJECT EDIT/DELETE - frontend LIVE, backend Version 42 (2026-11-05).**
+**MATERIAL DETAIL PAGE + PROJECT EDIT/DELETE - LIVE (Version 42, 2026-11-05 1:49 PM).**
+Backend deployed by Claude patching the Monaco editor in Chrome; Mac did not touch it.
+Verified live against both tokens: owner gets `not found` on `updateShoppingItem`,
+`deleteProject` and `updateProject` with a bogus id (so the actions route), and a crew
+token gets `owner only` on all three of `deleteProject`, `updateProject` and `addProject`
+(so the gates hold). **Version 41 is the rollback.**
 Mac's framing, and it is now the rule: **every tab should have a list and a tile
 view, and everything you click into should behave the same way across the app.**
 Build to that, not to one-off layouts.
@@ -231,9 +236,10 @@ Claude driving the Apps Script editor in Chrome; Mac did not touch it.
   resets, and responsibilities kept their flag. No page errors.
 
 **Where the live script actually is:** project `17fQKFbpZe6mdpNVl-ANQKD3LMz-AkUlFXNsI-1T6_L9WMdrioFItMqvt`,
-one of TWO projects both named "Untitled project" in script.google.com/home/my.
-The live one is the newer; the July one is the stale duplicate the Aug audit said
-to delete. Renaming the live one to "Stringer OS Backend" is still owed.
+**renamed "Stringer OS Backend" on 2026-11-05**, so it is no longer ambiguous. The
+other project, still called "Untitled project" in script.google.com/home/my, is the
+stale July duplicate the Aug audit said to delete. **If you see "Untitled project",
+you are in the wrong one.**
 
 **Hide-finished + archive everywhere — frontend LIVE (2026-11-02), no backend change.**
 - **Project tiles carry a status badge.** `SC` gained the project statuses actually
