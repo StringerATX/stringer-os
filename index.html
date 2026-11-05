@@ -258,7 +258,8 @@ button{font-family:inherit;cursor:pointer;}input,select,textarea{font-family:inh
   <div class="bnav" id="bnav" style="display:none">
     <button class="nbtn" id="nav-inbox" onclick="switchTab('inbox')"><span class="nicon">▤</span><span class="nlabel" id="inbox-label">INBOX</span></button>
     <button class="nbtn active" id="nav-mac" onclick="switchTab('mac')"><span class="nicon">◉</span><span class="nlabel">MAC</span></button>
-    <button class="nbtn" id="nav-rhythm" onclick="switchTab('rhythm')"><span class="nicon">◔</span><span class="nlabel">RHYTHM</span></button>
+    <!-- RHYTHM hidden 2026-11-05 at Mac's request. Its anchors already feed the MAC tab. rRhythm and all rhythm data/logic stay live underneath. Remove style to bring the tab back. -->
+    <button class="nbtn" id="nav-rhythm" style="display:none" onclick="switchTab('rhythm')"><span class="nicon">◔</span><span class="nlabel">RHYTHM</span></button>
     <button class="nbtn" id="nav-stringer" onclick="switchTab('stringer')"><span class="nicon">⬡</span><span class="nlabel">STRINGER</span></button>
     <button class="nbtn" id="nav-creative" onclick="switchTab('creative')"><span class="nicon">✦</span><span class="nlabel">CREATIVE</span></button>
     <button class="nbtn" id="nav-people" onclick="switchTab('people')"><span class="nicon">◈</span><span class="nlabel">PEOPLE</span></button>
