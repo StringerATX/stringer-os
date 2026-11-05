@@ -298,7 +298,7 @@ function apiUrl(extra) {
 
 var S = {
   user:null,projects:[],tasks:[],shopping:[],personal:[],ideas:[],people:[],voiceInbox:[],trades:[],schedule:[],tasksArchive:[],
-  tab:'mac',sv:'today',sf:{type:'all',value:null},
+  tab:'mac',sv:'today',sf:{vendor:'',project:''},
   projectPage:null,taskPage:null,tradeFilter:'all',
   et:null,at:null,as:false,ap:false,ai:false,icat:'all',
   np:'MEDIUM',nc:'daily',nic:'Film',pp:null,addPerson:false,showAddProject:false,
@@ -1208,12 +1208,22 @@ function atfSimple(){
 function rShopping(){
   var vnd=[...new Set(S.shopping.map(function(s){return String(s.Vendor||'');}))].filter(Boolean).sort();
   var pids=[...new Set(S.shopping.map(function(s){return String(s.Project||'');}))].filter(Boolean);
-  var h=layBar()+'<div class="chips">'+ch('All',S.sf.type==='all',"setSF('all',null)");
-  vnd.forEach(function(v){h+=ch(v,S.sf.type==='vendor'&&S.sf.value===v,"setSF('vendor','"+v+"')");});
-  h+='<div class="cdiv"></div>';
-  pids.forEach(function(pid){var pr=S.projects.find(function(p){return String(p.ID)===pid;});if(!pr)return;var ac=S.sf.type==='project'&&S.sf.value===pid;h+='<button class="chip'+(ac?' active':'')+'" style="'+(ac?'background:'+esc(String(pr.Color))+';border:none':'')+'" onclick="setSF(\'project\',\''+pid+'\')">'+esc(String(pr.Name))+'</button>';});
+  // Two dropdowns rather than a wall of chips. On a phone, 30-odd vendor and
+  // project chips pushed the actual list off the bottom of the screen. These
+  // STACK rather than replace each other: vendor AND project, both optional.
+  var nV = function(v){ return S.shopping.filter(function(s){return String(s.Vendor||'')===v;}).length; };
+  var nP = function(p){ return S.shopping.filter(function(s){return String(s.Project||'')===p;}).length; };
+  var h=layBar()+'<div class="frow">';
+  h+='<select class="fsel" style="flex:1;min-width:0" onchange="setSF(\'vendor\',this.value)"><option value=""'+(!S.sf.vendor?' selected':'')+'>All vendors</option>'
+    + vnd.map(function(v){return'<option value="'+esc(v)+'"'+(S.sf.vendor===v?' selected':'')+'>'+esc(v)+' ('+nV(v)+')</option>';}).join('') + '</select>';
+  h+='<select class="fsel" style="flex:1;min-width:0" onchange="setSF(\'project\',this.value)"><option value=""'+(!S.sf.project?' selected':'')+'>All projects</option>'
+    + pids.map(function(pid){var pr=S.projects.find(function(p){return String(p.ID)===pid;});if(!pr)return'';return'<option value="'+esc(pid)+'"'+(S.sf.project===pid?' selected':'')+'>'+esc(String(pr.Name))+' ('+nP(pid)+')</option>';}).join('') + '</select>';
   h+='</div>';
-  var fil=S.shopping.filter(function(s){if(S.sf.type==='all')return true;if(S.sf.type==='vendor')return String(s.Vendor)===S.sf.value;return String(s.Project)===S.sf.value;});
+  var fil=S.shopping.filter(function(s){
+    if(S.sf.vendor && String(s.Vendor||'')!==S.sf.vendor)return false;
+    if(S.sf.project && String(s.Project||'')!==S.sf.project)return false;
+    return true;
+  });
   var nd=fil.filter(function(s){return s.Status!=='BOUGHT';});
   var bt=fil.filter(function(s){return s.Status==='BOUGHT';});
   h+=sl('Needed',nd.length);
@@ -1493,7 +1503,7 @@ function togP(id){
   apiCall({action:'savePersonalItems',items:JSON.stringify(S.personal)});
 }
 function togPP(id){S.pp=id;render();}
-function setSF(t,v){S.sf={type:t,value:v};render();}
+function setSF(which,v){S.sf[which]=v||'';render();}
 function setIC(c){S.icat=c;render();}
 function startAT(ctx){S.at=ctx;S.np='MEDIUM';render();}
 function canAT(){S.at=null;render();}

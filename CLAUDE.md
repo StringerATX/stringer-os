@@ -110,6 +110,14 @@ Build to that, not to one-off layouts.
   they were simply never surfaced. Check the sheet before assuming a migration.
 - **Shopping rows now carry the project name**, colored by project, and `shX(s,hideProj)`
   takes a flag so rows inside a project detail do not repeat that project's own name.
+- **Shopping filters are two dropdowns, not chips (2026-11-05).** Vendor and project
+  chips were ~19 buttons that wrapped into a 440px-tall header on a phone, pushing the
+  actual materials off the screen. They are now two `<select>` elements side by side.
+  **They STACK rather than replace each other** — `S.sf` went from `{type,value}`
+  (either/or) to `{vendor,project}` (both optional, both applied). Two dropdowns that
+  silently cleared each other would read as broken. Measured on a 390x844 phone with
+  8 projects and 10 vendors: first material moved from y=440 to y=239, and visible
+  materials went 5 -> 7. Mac's real sheet has more projects, so the saving is larger.
 - **`shList` mirrors `tiList` deliberately.** The checkbox stays its own tap so a list
   can still be ticked off in a store, and only the text opens the detail page. Do not
   "simplify" this into a plain `lrow`, it costs one-tap buy-off.
