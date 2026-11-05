@@ -433,16 +433,20 @@ with `p4`: its "min 2x" target for the morning property loop is not in `pd2`.
 
 ## MAC_IDEAS (idea vault)
 
-- `MAC_IDEAS` holds 28 entries. It was **titles only** until 2026-11-03, when the
+- `MAC_IDEAS` holds 30 entries. i29 "Back to Even" was added 11-02 and i30 "Monkeys
+  Figured Out Answers" on 11-05. It was **titles only** until 2026-11-03, when the
   full descriptions were lifted out of **`idea-vault-spark-lines.md`** in Drive
   into the new `Body` column. That doc is still the origin and still worth reading,
   but the sheet is no longer a list of bare names.
-- Categories in use: `Film` (8), `Essay / TikTok` (8), `Art` (6),
+- Categories in use: `Film` (8), `Essay / TikTok` (10), `Art` (6),
   `Infrastructure` (2), `Venture` (3), `Music` (1). **`Venture` replaced the old
   `Business`** category. The filter chips **are** hardcoded in `index.html` as the
   `IC` array (~line 199) — adding a category to the sheet without adding it there
   leaves those ideas visible only under the "All" chip. `IC` was updated 2026-08-31.
-- IDs are `i1`..`i28`, `CreatedAt` is plain `YYYY-MM-DD`. The `saveIdeas` action
+- IDs are `i1`..`i30`. **`CreatedAt` is NOT plain `YYYY-MM-DD` in the sheet**, whatever
+  an older note said: every row holds a long JS date string like
+  `Thu Nov 05 2026 00:00:00 GMT-0600 (Central Standard Time)`. Match that format when
+  appending, and let `plainCell_` normalize it on read. The `saveIdeas` action
   takes a JSON array in the `ideas` param and **rewrites the whole tab** — there
   is no per-row idea edit.
 - **`Body` and `Link` added 2026-11-03.** `Body` holds the full idea text, `Link`
