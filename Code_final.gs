@@ -63,6 +63,9 @@ function handleAction_(action, p, user) {
   if (action === 'updateTaskPriority')   return updateTaskPriority(p.id, p.priority);
   if (action === 'updateTaskToday')      return updateTaskToday(p.id, p.on);
   if (action === 'toggleShoppingStatus') return toggleShoppingStatus(p.id);
+  if (action === 'updateShoppingItem')   return updateShoppingItem(p.id, { material: p.material, project: p.project, trade: p.trade, qty: p.qty, unitCost: p.unitCost, vendor: p.vendor, notes: p.notes });
+  if (action === 'deleteProject')        return deleteProject(p.id, p.reason || '', user);
+  if (action === 'updateProject')        return updateProject(p.id, { name: p.name, status: p.status, client: p.client, location: p.location, color: p.color, budget: p.budget, actual: p.actual, permitNum: p.permitNum, jurisdiction: p.jurisdiction, inspectionsReq: p.inspectionsReq, percentComplete: p.percentComplete }, user);
   if (action === 'updateTaskNotes')      return updateTaskNotes(p.id, p.notes);
   if (action === 'updateTaskDescription') return updateTaskDescription(p.id, p.description);
   if (action === 'deleteTask')           return deleteTask(p.id, p.reason || '');
@@ -81,7 +84,7 @@ function handleAction_(action, p, user) {
   if (action === 'updateTaskAssignee')   return updateTaskAssignee(p.id, p.assignedTo);
   if (action === 'addVoiceEntry')        return addVoiceEntry(p.raw);
   if (action === 'processVoiceEntry')    return processVoiceEntry(p.id);
-  if (action === 'addProject')           return addProject({ name: p.name, status: p.status, client: p.client, location: p.location, color: p.color, budget: p.budget, permitNum: p.permitNum });
+  if (action === 'addProject')           return addProject({ name: p.name, status: p.status, client: p.client, location: p.location, color: p.color, budget: p.budget, permitNum: p.permitNum }, user);
   return {error: 'Unknown action: ' + action};
 }
 
@@ -230,7 +233,10 @@ function deleteScheduleEntry(id, reason) {
 }
 
 // ─── PROJECTS ────────────────────────────────────────────────
-function addProject(p) {
+function addProject(p, user) {
+  // The Add Project button has been owner-gated in the UI since the 11-03
+  // crew-projects change, but the action itself never was. Closing that here.
+  if (!user || user.role !== 'owner') return {error:'owner only'};
   var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName('PROJECTS');
   var id = p.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
   sheet.appendRow([id, p.name, p.status||'NEW', p.client||'', p.location||'', p.color||'#2a5a8c', p.budget||'', 0, p.permitNum||'', '', '', '0%']);
@@ -430,6 +436,93 @@ function toggleShoppingStatus(id) {
       sheet.getRange(i+1, 8).setValue(v[i][7] === 'BOUGHT' ? 'NEEDED' : 'BOUGHT');
       return {success:true};
     }
+  }
+  return {error:'not found'};
+}
+
+// Field-by-field material edit. Columns are looked up from the header rather
+// than hardcoded, so inserting a column in SHOPPING cannot silently write the
+// wrong cell. Only the fields actually sent get written, so a partial call
+// never blanks the rest of the row.
+function updateShoppingItem(id, f) {
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName('SHOPPING');
+  var v = sheet.getDataRange().getValues();
+  var header = v[0].map(function(h){ return String(h); });
+  var map = {
+    material: 'Material', project: 'Project', trade: 'Trade',
+    qty: 'Qty', unitCost: 'UnitCost', vendor: 'Vendor', notes: 'Notes'
+  };
+  for (var i = 1; i < v.length; i++) {
+    if (String(v[i][0]) !== String(id)) continue;
+    var wrote = [];
+    for (var k in map) {
+      if (f[k] === undefined || f[k] === null) continue;
+      var col = header.indexOf(map[k]);
+      if (col < 0) continue;                       // column not in this sheet
+      var val = f[k];
+      // Qty and UnitCost live as numbers in the sheet. Keep them that way when
+      // they parse, so the Actual rollups and any formula still add up.
+      if ((k === 'qty' || k === 'unitCost') && val !== '' && !isNaN(Number(val))) val = Number(val);
+      sheet.getRange(i+1, col+1).setValue(val);
+      wrote.push(map[k]);
+    }
+    return {success:true, wrote:wrote};
+  }
+  return {error:'not found'};
+}
+
+// ─── PROJECTS (edit + delete) ────────────────────────────────
+// Same archive-then-remove shape as deleteTask. Nothing is hard-deleted.
+// Tasks and materials are deliberately NOT cascaded: their rows stay in TASKS
+// and SHOPPING so no work history disappears with the project row.
+function deleteProject(id, reason, user) {
+  // Gated here, not in the UI. The token is the only security and the exec URL
+  // is public in index.html, so a crew token could post this action directly.
+  if (!user || user.role !== 'owner') return {error:'owner only'};
+  var ss = SpreadsheetApp.openById(CONFIG.SHEET_ID);
+  var sheet = ss.getSheetByName('PROJECTS');
+  var v = sheet.getDataRange().getValues();
+  var header = v[0];
+  for (var i = 1; i < v.length; i++) {
+    if (String(v[i][0]) === String(id)) {
+      archiveRow_(ss, 'PROJECTS_ARCHIVE', header, v[i], reason);
+      sheet.deleteRow(i+1);
+      return {success:true};
+    }
+  }
+  return {error:'not found'};
+}
+
+// Set any PROJECTS field by header name. This is what finally makes
+// Jurisdiction editable from the app, and what a per-project "keep visible"
+// pin would hang off later.
+function updateProject(id, f, user) {
+  // Owner only for the same reason as deleteProject, and more so: Budget and
+  // Actual are stripped from the crew payload entirely, so a crew token must
+  // not be able to write the figures it is not even allowed to read.
+  if (!user || user.role !== 'owner') return {error:'owner only'};
+  var sheet = SpreadsheetApp.openById(CONFIG.SHEET_ID).getSheetByName('PROJECTS');
+  var v = sheet.getDataRange().getValues();
+  var header = v[0].map(function(h){ return String(h); });
+  var map = {
+    name: 'Name', status: 'Status', client: 'Client', location: 'Location',
+    color: 'Color', budget: 'Budget', actual: 'Actual', permitNum: 'PermitNum',
+    jurisdiction: 'Jurisdiction', inspectionsReq: 'InspectionsReq',
+    percentComplete: 'PercentComplete'
+  };
+  for (var i = 1; i < v.length; i++) {
+    if (String(v[i][0]) !== String(id)) continue;
+    var wrote = [];
+    for (var k in map) {
+      if (f[k] === undefined || f[k] === null) continue;
+      var col = header.indexOf(map[k]);
+      if (col < 0) continue;
+      var val = f[k];
+      if ((k === 'budget' || k === 'actual') && val !== '' && !isNaN(Number(val))) val = Number(val);
+      sheet.getRange(i+1, col+1).setValue(val);
+      wrote.push(map[k]);
+    }
+    return {success:true, wrote:wrote};
   }
   return {error:'not found'};
 }

@@ -305,7 +305,8 @@ var S = {
   captureRoute:'MAC',se:null,sadd:false,tdDel:false,tdEditDesc:false,showArchive:false,
   triageId:null,triageDest:null,
   showDoneProjects:false,showArchPersonal:false,showArchIdeas:false,showSite:false,_wake:'',
-  openGroup:{},layout:'tile',ideaPage:null,ideaEdit:false,ideaScroll:0
+  openGroup:{},layout:'tile',ideaPage:null,ideaEdit:false,ideaScroll:0,
+  matPage:null,matScroll:0,pDel:null
 };
 // Layout choice is a per-device convenience, so localStorage is the right home
 // for it. Wrapped because a private window or blocked site data makes these throw.
@@ -421,8 +422,8 @@ function apiCall(params) {
   return fetch(apiUrl(new URLSearchParams(params).toString())).then(function(r){return r.json();});
 }
 
-function switchTab(t){S.tab=t;S.projectPage=null;S.taskPage=null;S.ideaPage=null;S.ideaEdit=false;S.at=null;S.as=false;S.tradeFilter='all';S.triageId=null;S.triageDest=null;['inbox','mac','rhythm','stringer','creative','people'].forEach(function(x){var b=document.getElementById('nav-'+x);if(b)b.className='nbtn'+(x===t?' active':'');});render();}
-function svSwitch(v){S.sv=v;S.at=null;S.as=false;S.projectPage=null;S.taskPage=null;render();}
+function switchTab(t){S.tab=t;S.projectPage=null;S.taskPage=null;S.ideaPage=null;S.ideaEdit=false;S.matPage=null;S.at=null;S.as=false;S.tradeFilter='all';S.triageId=null;S.triageDest=null;['inbox','mac','rhythm','stringer','creative','people'].forEach(function(x){var b=document.getElementById('nav-'+x);if(b)b.className='nbtn'+(x===t?' active':'');});render();}
+function svSwitch(v){S.sv=v;S.at=null;S.as=false;S.projectPage=null;S.taskPage=null;S.matPage=null;render();}
 
 function render(){
   var hdr=document.getElementById('mainheader');
@@ -431,6 +432,11 @@ function render(){
     var tproj=tp?S.projects.find(function(p){return String(p.ID)===String(tp.Project);}):null;
     hdr.className='header detail';
     hdr.innerHTML='<button class="hback" onclick="closeTask()">←</button><div class="hname project">'+(tproj?esc(String(tproj.Name)):'Task')+'</div>';
+  } else if(S.matPage){
+    var mp=S.shopping.find(function(x){return String(x.ID)===String(S.matPage);});
+    var mproj=mp?S.projects.find(function(p){return String(p.ID)===String(mp.Project);}):null;
+    hdr.className='header detail';
+    hdr.innerHTML='<button class="hback" onclick="closeMat()">←</button><div class="hname project">'+(mproj?esc(String(mproj.Name)):'Material')+'</div>';
   } else if(S.ideaPage){
     var ip=S.ideas.find(function(x){return String(x.id)===String(S.ideaPage);});
     hdr.className='header detail';
@@ -543,10 +549,15 @@ function routeDefault(raw){
 }
 function rInbox(){
   var items=S.voiceInbox||[];
-  var h='<div class="pad">'+sl('Inbox',items.length);
+  var h='<div class="pad">'+layBar()+sl('Inbox',items.length);
   if(!items.length)h+='<div class="empty">Inbox zero — nothing to triage</div>';
-  items.forEach(function(v){h+=inboxItem(v);});
+  items.forEach(function(v){h+=viX(v);});
   return h+'</div>';
+}
+// The item being triaged always renders full, otherwise the form has nowhere to go.
+function viX(v){
+  if(S.layout!=='list'||S.triageId===v.ID)return inboxItem(v);
+  return lrow("openTriage('"+String(v.ID).replace(/'/g,"\\'")+"')",'#f0a03f',esc(inboxClean(v.Raw)),esc(String(v.Source||'')),false);
 }
 function inboxItem(v){
   var open=S.triageId===v.ID;
@@ -735,6 +746,7 @@ function apf(){var cats=['daily','health','personal','service','financial'];retu
 
 function rStringer(){
   if(S.taskPage) return rTaskDetail();
+  if(S.matPage) return rMatDetail();
   if(S.projectPage) return rProjectDetail();
   var own=S.user.role==='owner';
   var h=own?'<div class="subnav">'+sb('today','TODAY')+sb('sched','SCHEDULE')+sb('projects','PROJECTS')+sb('crew','CREW')+sb('shopping','SHOPPING')+'</div>':'<div class="subnav">'+sb('today','MY DAY')+sb('sched','SCHEDULE')+sb('projects','PROJECTS')+sb('shopping','SHOPPING')+'</div>';
@@ -885,7 +897,7 @@ function rProjectDetail(){
   var bought=projMats.filter(function(s){return s.Status==='BOUGHT';});
   h+=sl('Materials',needed.length,'margin-top:20px');
   if(!needed.length)h+='<div class="empty">No materials needed</div>';
-  needed.forEach(function(s){h+=shX(s);});
+  needed.forEach(function(s){h+=shX(s,true);});
   if(bought.length)h+='<div style="font-size:14px;color:#9a9384;padding:8px 0">+ '+bought.length+' bought</div>';
   h+=S.as?asfFull():'<button class="addbtn" onclick="startAS()">+ Add material</button>';
   return h+'</div>';
@@ -964,9 +976,14 @@ function saveTaskAssignee(id){
   apiCall({action:'updateTaskAssignee',id:id,assignedTo:who});
 }
 
-function shiFull(s){
+// hideProj is set when the row already sits inside a project, where repeating
+// the project name on every line is just noise.
+function shiFull(s,hideProj){
   var bt=s.Status==='BOUGHT';
-  return'<div class="shitem"><button class="shchk'+(bt?' bought':'')+'" onclick="togSH(\''+s.ID+'\')">'+( bt?'✓':'')+'</button><div class="shbody"><div class="shdesc'+(bt?' bought':'')+'">'+esc(String(s.Material||s.Description||''))+'</div><div class="shmeta"><span style="letter-spacing:.08em;text-transform:uppercase;font-size:13px">'+esc(String(s.Trade||''))+'</span><span>'+esc(String(s.Vendor||''))+'</span>'+(s.Qty?'<span>qty: '+s.Qty+(s.UnitCost?' @ $'+s.UnitCost:'')+'</span>':'')+'</div></div></div>';
+  var pr=S.projects.find(function(p){return String(p.ID)===String(s.Project);});
+  var np=notePreview(s.Notes);
+  var oc='openMat(\''+String(s.ID).replace(/'/g,"\\'")+'\')';
+  return'<div class="shitem"><button class="shchk'+(bt?' bought':'')+'" onclick="togSH(\''+s.ID+'\')">'+( bt?'✓':'')+'</button><div class="shbody" onclick="'+oc+'">'+(!hideProj&&pr?'<div style="font-size:13px;color:'+esc(String(pr.Color||'#c3bcab'))+';letter-spacing:.12em;text-transform:uppercase;margin-bottom:2px">'+esc(String(pr.Name))+'</div>':'')+'<div class="shdesc'+(bt?' bought':'')+'">'+esc(String(s.Material||s.Description||''))+'</div>'+(np?'<div class="tnote">'+esc(np)+'</div>':'')+'<div class="shmeta"><span style="letter-spacing:.08em;text-transform:uppercase;font-size:13px">'+esc(String(s.Trade||''))+'</span><span>'+esc(String(s.Vendor||''))+'</span>'+(s.Qty?'<span>qty: '+s.Qty+(s.UnitCost?' @ $'+s.UnitCost:'')+'</span>':'')+'</div></div><span class="tchev" onclick="'+oc+'">›</span></div>';
 }
 
 function atfDetail(){
@@ -994,9 +1011,12 @@ function rProjectList(){
     var stb=st?'<span class="badge" style="background:'+sbg+';color:'+onColor(sbg)+'">'+esc(st)+'</span>':'';
     if(S.layout==='list'){
       h+=lrow("openProject('"+String(p.ID).replace(/'/g,"\\'")+"')",esc(String(p.Color||'#3f7cc4')),esc(String(p.Name||'')),(st?esc(st):'')+(op.length?' \u00b7 '+op.length+' open':''),projDone(p));
+      h+=pDelStrip(p,own);
       return;
     }
-    h+='<div class="pcard" onclick="openProject(\''+p.ID+'\')"><button class="phdr"><div class="pbar" style="background:'+esc(String(p.Color||'#3f7cc4'))+'"></div><div class="pinfo"><div class="pname">'+esc(String(p.Name||''))+'</div><div class="psub">'+esc(String(p.Client||''))+' · '+esc(String(p.Location||''))+'</div><div class="pstat">'+stb+'</div></div><div class="pbadges">'+(hi.length?'<span class="badge" style="background:#e0553f">'+hi.length+' high</span>':'')+(op.length?'<span class="badge" style="background:#9a9384">'+op.length+' open</span>':'')+'<span style="color:#c3bcab;font-size:17px">›</span></div></button></div>';
+    var dx=own?'<span onclick="askDelProject(\''+p.ID+'\',event)" style="color:#9a9384;font-size:19px;padding:0 4px;line-height:1">\u00d7</span>':'';
+    h+='<div class="pcard" onclick="openProject(\''+p.ID+'\')"><button class="phdr"><div class="pbar" style="background:'+esc(String(p.Color||'#3f7cc4'))+'"></div><div class="pinfo"><div class="pname">'+esc(String(p.Name||''))+'</div><div class="psub">'+esc(String(p.Client||''))+' · '+esc(String(p.Location||''))+'</div><div class="pstat">'+stb+'</div></div><div class="pbadges">'+(hi.length?'<span class="badge" style="background:#e0553f">'+hi.length+' high</span>':'')+(op.length?'<span class="badge" style="background:#9a9384">'+op.length+' open</span>':'')+dx+'<span style="color:#c3bcab;font-size:17px">›</span></div></button></div>';
+    h+=pDelStrip(p,own);
   });
   if(!show.length)h+='<div class="empty">No live projects</div>';
   return h;
@@ -1154,10 +1174,18 @@ function lrow(onclick,dot,text,right,done){
   return'<div class="lrow" onclick="'+onclick+'"><span class="ldot" style="background:'+dot+'"></span><span class="ldesc'+(done?' done':'')+'">'+text+'</span><span class="lwho">'+right+'</span></div>';
 }
 function tiD(t){return S.layout==='list'?tiList(t):tiDetail(t);}
-function shX(s){
-  if(S.layout!=='list')return shiFull(s);
+function shX(s,hideProj){
+  if(S.layout!=='list')return shiFull(s,hideProj);
+  return shList(s,hideProj);
+}
+// Mirrors tiList: the checkbox stays its own tap so a list can still be ticked
+// off in the store, and only the text opens the detail page.
+function shList(s,hideProj){
   var bt=s.Status==='BOUGHT';
-  return lrow("togSH('"+String(s.ID).replace(/'/g,"\\'")+"')",bt?'#5d9b6e':'#c3bcab',esc(String(s.Material||s.Description||'')),esc(String(s.Vendor||'')),bt);
+  var pr=S.projects.find(function(p){return String(p.ID)===String(s.Project);});
+  var right=hideProj?String(s.Vendor||''):String(pr?pr.Name:(s.Project||''));
+  var dot=bt?'#5d9b6e':(pr&&pr.Color?String(pr.Color):'#c3bcab');
+  return'<div class="lrow"><button class="shchk'+(bt?' bought':'')+'" style="width:20px;height:20px;font-size:13px" onclick="togSH(\''+s.ID+'\')">'+(bt?'✓':'')+'</button><span class="ldot" style="background:'+esc(dot)+'"></span><span class="ldesc'+(bt?' done':'')+'" onclick="openMat(\''+String(s.ID).replace(/'/g,"\\'")+'\')">'+esc(String(s.Material||s.Description||''))+'</span><span class="lwho">'+esc(right)+'</span></div>';
 }
 function iX(i){
   if(S.layout!=='list')return iItem(i);
@@ -1180,7 +1208,7 @@ function atfSimple(){
 function rShopping(){
   var vnd=[...new Set(S.shopping.map(function(s){return String(s.Vendor||'');}))].filter(Boolean).sort();
   var pids=[...new Set(S.shopping.map(function(s){return String(s.Project||'');}))].filter(Boolean);
-  var h='<div class="chips">'+ch('All',S.sf.type==='all',"setSF('all',null)");
+  var h=layBar()+'<div class="chips">'+ch('All',S.sf.type==='all',"setSF('all',null)");
   vnd.forEach(function(v){h+=ch(v,S.sf.type==='vendor'&&S.sf.value===v,"setSF('vendor','"+v+"')");});
   h+='<div class="cdiv"></div>';
   pids.forEach(function(pid){var pr=S.projects.find(function(p){return String(p.ID)===pid;});if(!pr)return;var ac=S.sf.type==='project'&&S.sf.value===pid;h+='<button class="chip'+(ac?' active':'')+'" style="'+(ac?'background:'+esc(String(pr.Color))+';border:none':'')+'" onclick="setSF(\'project\',\''+pid+'\')">'+esc(String(pr.Name))+'</button>';});
@@ -1287,16 +1315,23 @@ function saveIdeaBody(id){
 
 function rPeople(){
   var sorted=S.people.slice().sort(function(a,b){return daysSince(b.LastContact)-daysSince(a.LastContact);});
-  var h='<div class="pad">'+sl('Contacts',sorted.length);
+  var h='<div class="pad">'+layBar()+sl('Contacts',sorted.length);
   sorted.forEach(function(p){
     var ex=S.pp===p.ID;
     var col=contactColor(String(p.LastContact));
-    h+='<div class="person-item"><div class="person-row" onclick="togPP(\''+p.ID+'\')">';
+    var d=daysSince(String(p.LastContact));
+    h+='<div class="person-item">';
+    if(S.layout==='list'&&!ex){
+      h+=lrow("togPP('"+String(p.ID).replace(/'/g,"\\'")+"')",col,esc(String(p.Name||'')),esc(String(p.Role||''))+(d<999?' · '+d+'d':''),false);
+      h+='</div>';
+      return;
+    }
+    h+='<div class="person-row" onclick="togPP(\''+p.ID+'\')">';
     h+='<div class="person-dot" style="background:'+col+'"></div>';
     h+='<div class="person-body"><div class="person-name">'+esc(String(p.Name||''))+'</div><div class="person-role">'+esc(String(p.Role||''))+(p.Type&&String(p.Type)!=='Contact'?' · '+esc(String(p.Type)):'')+'</div>';
     if(p.LastContactNote)h+='<div class="person-note">'+esc(String(p.LastContactNote))+'</div>';
     if(p.NextAction)h+='<div class="person-next">→ '+esc(String(p.NextAction))+'</div>';
-    var d=daysSince(String(p.LastContact));h+='<div class="person-days">'+(d<999?d+' days ago':'No contact logged')+'</div>';
+    h+='<div class="person-days">'+(d<999?d+' days ago':'No contact logged')+'</div>';
     h+='</div></div>';
     if(ex){
       h+='<div class="person-detail"><div style="font-size:13px;color:#c3bcab;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Update Contact</div>';
@@ -1313,11 +1348,93 @@ function rPeople(){
 }
 
 // ─── ACTIONS ─────────────────────────────────────────────────
-function openProject(id){S.projectPage=id;S.taskPage=null;S.tradeFilter='all';S.at=null;S.as=false;render();}
+// Project delete lives outside the .pcard, whose own onclick opens the project.
+// Anything clickable inside that card would navigate instead of confirming.
+function pDelStrip(p,own){
+  if(!own||S.pDel!==p.ID)return'';
+  var pt=S.tasks.filter(function(t){return String(t.Project)===String(p.ID);}).length;
+  var pm=S.shopping.filter(function(s){return String(s.Project)===String(p.ID);}).length;
+  var warn=(pt||pm)?'<div class="td-delnote">Leaves '+pt+' task'+(pt===1?'':'s')+' and '+pm+' material'+(pm===1?'':'s')+' pointing at a project that is gone. Those rows stay in the sheet.</div>':'';
+  return'<div class="td-del"><div class="td-slabel" style="margin-top:0">Delete '+esc(String(p.Name||''))+'?</div><input class="finput" id="pd-reason-'+p.ID+'" placeholder="Reason (optional)" autofocus><div class="facts"><button class="bprim" style="background:#e0553f" onclick="confirmDelProject(\''+p.ID+'\')">Confirm delete</button><button class="bcan" onclick="S.pDel=null;render()">Cancel</button></div>'+warn+'<div class="td-delnote">Copied to PROJECTS_ARCHIVE with today\'s date and your reason before the row is removed.</div></div>';
+}
+function askDelProject(id,ev){
+  if(ev&&ev.stopPropagation){ev.stopPropagation();ev.preventDefault();}
+  S.pDel=S.pDel===id?null:id;render();
+}
+function confirmDelProject(id){
+  var el=document.getElementById('pd-reason-'+id);
+  var reason=el?el.value.trim():'';
+  var p=S.projects.find(function(x){return String(x.ID)===String(id);});
+  var idx=S.projects.indexOf(p);
+  S.projects=S.projects.filter(function(x){return String(x.ID)!==String(id);});
+  S.pDel=null;render();
+  apiCall({action:'deleteProject',id:id,reason:reason}).then(function(r){
+    if(!r||r.error){
+      if(p&&idx>-1)S.projects.splice(idx,0,p);
+      render();
+      alert('Project not deleted: '+((r&&r.error)||'no response')+(/Unknown action/i.test(String(r&&r.error))?'\n\nThe backend needs a New version deploy.':''));
+    }
+  }).catch(function(e){
+    if(p&&idx>-1)S.projects.splice(idx,0,p);
+    render();
+    alert('Project not deleted: '+(e&&e.message?e.message:'network error'));
+  });
+}
+function openProject(id){S.projectPage=id;S.taskPage=null;S.matPage=null;S.tradeFilter='all';S.at=null;S.as=false;S.pDel=null;render();}
 // Remember where the list was scrolled so closing the detail page lands back on
 // the same spot - after a DONE, the next task sits where the finished one was.
 function openTask(id){S.listScroll=window.scrollY;S.taskPage=id;S.et=null;S.tdDel=false;S.tdEditDesc=false;render();window.scrollTo(0,0);}
 function closeTask(){S.taskPage=null;S.tdDel=false;S.tdEditDesc=false;render();window.scrollTo(0,S.listScroll||0);}
+// Materials open the same detail page whether you came from the SHOPPING tab or
+// from inside a project, so there is one material page, not two.
+function openMat(id){S.matScroll=window.scrollY;S.matPage=id;render();window.scrollTo(0,0);}
+function closeMat(){S.matPage=null;render();window.scrollTo(0,S.matScroll||0);}
+
+function rMatDetail(){
+  var s=S.shopping.find(function(x){return String(x.ID)===String(S.matPage);});
+  if(!s)return'<div class="pad"><div class="empty">Material not found</div></div>';
+  var pr=S.projects.find(function(p){return String(p.ID)===String(s.Project);});
+  var bt=s.Status==='BOUGHT';
+  var url=firstUrl(s.Notes);
+  var i=s.ID;
+  var h='<div class="pad">';
+  h+='<div class="td-top"><div class="pdot" style="background:'+(bt?'#5d9b6e':'#c3bcab')+';margin-top:7px"></div><div style="flex:1"><div class="ttrade">'+esc(String(s.Trade||'General'))+(pr?' · '+esc(String(pr.Name)):'')+'</div><input class="finput" id="md-mat-'+i+'" value="'+esc(String(s.Material||''))+'" placeholder="Material" style="margin-top:4px"></div></div>';
+  h+='<div class="td-slabel" style="margin-top:14px">Status</div><div class="sacts" style="padding:0">'+[['NEEDED','#9a9384'],['BOUGHT','#5d9b6e']].map(function(p){var on=(p[0]==='BOUGHT')===bt;return'<button class="sact'+(on?' active':'')+'" style="'+(on?'background:'+p[1]+';color:'+onColor(p[1]):'')+'" onclick="setMatStatus(\''+i+'\',\''+p[0]+'\')">'+p[0]+'</button>';}).join('')+'</div>';
+  h+='<div class="td-slabel" style="margin-top:16px">Project</div><select class="fsel" id="md-proj-'+i+'" style="width:100%">'+S.projects.map(function(p){return'<option value="'+esc(String(p.ID))+'"'+(String(p.ID)===String(s.Project)?' selected':'')+'>'+esc(String(p.Name))+'</option>';}).join('')+'</select>';
+  h+='<div class="frow" style="margin-top:12px"><div style="flex:1"><div class="td-mlabel">Trade</div><select class="fsel" id="md-trade-'+i+'" style="width:100%">'+S.trades.map(function(t){return'<option'+(String(s.Trade||'')===t?' selected':'')+'>'+t+'</option>';}).join('')+'</select></div><div style="width:72px"><div class="td-mlabel">Qty</div><input class="fsel" id="md-qty-'+i+'" type="number" value="'+esc(String(s.Qty||''))+'" style="width:100%"></div><div style="width:86px"><div class="td-mlabel">$/unit</div><input class="fsel" id="md-uc-'+i+'" type="number" value="'+esc(String(s.UnitCost||''))+'" style="width:100%"></div></div>';
+  h+='<div class="td-slabel" style="margin-top:14px">Vendor</div><input class="finput" id="md-vend-'+i+'" value="'+esc(String(s.Vendor||''))+'" placeholder="Vendor">';
+  var tot=(Number(s.Qty)||0)*(Number(s.UnitCost)||0);
+  if(tot)h+='<div class="td-meta"><div><div class="td-mlabel">Line total</div><div class="td-mval">'+fmt$(tot)+'</div></div></div>';
+  h+='<div class="td-slabel" style="margin-top:18px">Notes</div>';
+  h+='<textarea id="md-notes-'+i+'" class="td-notes" placeholder="Size, spec, a link to the product page, where it is sitting...">'+esc(String(s.Notes||''))+'</textarea>';
+  h+='<div class="facts"><button class="bprim" onclick="saveMat(\''+i+'\')">Save</button>'+(url?'<a class="td-attach" href="'+esc(url)+'" target="_blank" rel="noopener">Open Link</a>':'')+'</div>';
+  return h+'</div>';
+}
+
+function setMatStatus(id,st){
+  var s=S.shopping.find(function(x){return String(x.ID)===String(id);});
+  if(!s)return;
+  if((s.Status==='BOUGHT')===(st==='BOUGHT'))return;
+  togSH(id);
+}
+
+function saveMat(id){
+  var s=S.shopping.find(function(x){return String(x.ID)===String(id);});
+  if(!s)return;
+  var g=function(k){var el=document.getElementById('md-'+k+'-'+id);return el?String(el.value):'';};
+  var mat=g('mat').trim();
+  if(!mat){alert('Material name cannot be blank.');return;}
+  var keys=['Material','Project','Trade','Qty','UnitCost','Vendor','Notes'];
+  var prev={};keys.forEach(function(k){prev[k]=s[k];});
+  var p={material:mat,project:g('proj'),trade:g('trade'),qty:g('qty'),unitCost:g('uc'),vendor:g('vend'),notes:g('notes')};
+  s.Material=p.material;s.Project=p.project;s.Trade=p.trade;
+  s.Qty=p.qty;s.UnitCost=p.unitCost;s.Vendor=p.vendor;s.Notes=p.notes;
+  render();
+  var revert=function(msg){keys.forEach(function(k){s[k]=prev[k];});render();alert('Material not saved: '+msg+(/Unknown action/i.test(msg)?'\n\nThe backend needs a New version deploy.':''));};
+  apiCall({action:'updateShoppingItem',id:id,material:p.material,project:p.project,trade:p.trade,qty:p.qty,unitCost:p.unitCost,vendor:p.vendor,notes:p.notes})
+    .then(function(r){if(!r||r.error)revert((r&&r.error)||'no response');})
+    .catch(function(e){revert(e&&e.message?e.message:'network error');});
+}
 function setTF(t){S.tradeFilter=t;render();}
 function togET(id){S.et=S.et===id?null:id;render();}
 // Priority edit. Mirrors setTS, but reverts and tells the user if the write

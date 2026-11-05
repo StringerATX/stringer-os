@@ -56,7 +56,8 @@ format (it would make them guessable).
   restoreTask, updateTaskAssignee, toggleShoppingStatus, addTask, addShoppingItem,
   updateScheduleEntry, addScheduleEntry, deleteScheduleEntry, savePersonalItems,
   saveIdeas, updateTaskToday, addPerson, updateLastContact, updatePersonType, addVoiceEntry,
-  processVoiceEntry, addProject, archiveDoneTasks` (owner only, `days` param, default 30).
+  processVoiceEntry, addProject, archiveDoneTasks` (owner only, `days` param, default 30),
+  `updateShoppingItem, deleteProject` (owner only), `updateProject` (owner only).
 
 To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
 --data-urlencode "t=$TOKEN" --data-urlencode "action=addTask" ...`).
@@ -87,6 +88,57 @@ To hit the API from a script, URL-encode params (e.g. `curl -sSL -G "$EXEC"
   `SCHEDULE_ARCHIVE`) before removing — nothing is hard-deleted.
 
 ## Current feature status (as of 2026-08-31)
+
+**MATERIAL DETAIL PAGE + PROJECT EDIT/DELETE - frontend LIVE, backend Version 42 (2026-11-05).**
+Mac's framing, and it is now the rule: **every tab should have a list and a tile
+view, and everything you click into should behave the same way across the app.**
+Build to that, not to one-off layouts.
+
+- **`rShopping` never called `layBar()`.** The SHOPPING tab had no toggle button at
+  all, so it silently inherited whatever layout was last set on another tab. That
+  was the bug Mac hit when he said materials "aren't a tile right now." Fixed.
+- **New material detail page** (`rMatDetail`, `openMat`/`closeMat`, `saveMat`), with
+  scroll restore, same shape as the task detail page. Material, Project, Trade, Qty,
+  UnitCost, Vendor and Notes are all editable, plus NEEDED/BOUGHT buttons, a line
+  total, and an Open Link button when Notes holds a URL.
+- **No schema change was needed.** SHOPPING already carried `UnitCost` and `Notes`;
+  they were simply never surfaced. Check the sheet before assuming a migration.
+- **Shopping rows now carry the project name**, colored by project, and `shX(s,hideProj)`
+  takes a flag so rows inside a project detail do not repeat that project's own name.
+- **`shList` mirrors `tiList` deliberately.** The checkbox stays its own tap so a list
+  can still be ticked off in a store, and only the text opens the detail page. Do not
+  "simplify" this into a plain `lrow`, it costs one-tap buy-off.
+- **`updateShoppingItem` and `updateProject` look columns up from the header**, not by
+  fixed index, and only write the fields actually sent. A partial call cannot blank the
+  rest of the row and an inserted column cannot silently write the wrong cell.
+- **`deleteProject` archives to `PROJECTS_ARCHIVE` then removes**, same as `deleteTask`.
+  Tasks and materials are **deliberately not cascaded** — their rows stay in TASKS and
+  SHOPPING so no work history vanishes with the project row. The confirm strip on the
+  tile says how many rows will be left pointing at a gone project.
+- Project delete lives **outside** the `.pcard`, because that card's own onclick opens
+  the project and anything clickable inside it navigates instead of confirming.
+- **SECURITY: `addProject` was never owner-gated in the backend.** The UI button has
+  been owner-only since 11-03 but any crew token could post the action directly. Closed
+  in this deploy, along with gates on `deleteProject` and `updateProject`. `updateProject`
+  matters most: Budget and Actual are stripped from the crew payload entirely, so a crew
+  token must not be able to write figures it is not allowed to read. **Any new write
+  action needs its own server-side role check — the UI is not a gate.**
+- People and Inbox gained the toggle. **Mac and Rhythm deliberately did not** (time-ordered
+  checklists, a tile/list switch there changes nothing useful). Schedule deferred by
+  agreement: doing it right means rethinking it, not bolting a toggle on.
+- Verified: 44 backend logic checks against stubbed Apps Script objects (including every
+  owner gate and the header-lookup behavior) and 42 checks in Chromium covering both
+  layouts, the save and revert paths, and owner vs crew gating. No page errors.
+
+**CALENDAR IS CHEAPER THAN THE ROADMAP SAYS (found 2026-11-05, not built).** Roadmap #3
+and daily-plan blocker #3 both say the calendar is not connected and imply an external
+server. **Apps Script has `CalendarApp` built in and this web app already runs "Execute
+as me," so `getAppData_` can read Mac's calendar directly.** No OAuth dance, no hosted
+service. Mac asked for Google Calendar items to show up in the app's SCHEDULE tab and
+that is now a small job, not a big one. **It was deliberately NOT put in Version 42**,
+because adding `CalendarApp` adds a new OAuth scope, which forces a re-authorization of
+the deployed web app. If that goes wrong the exec URL starts failing for everyone, so it
+deserves a deploy where the scope change is the only variable.
 
 **CREW SEE PROJECTS, MONEY STRIPPED SERVER-SIDE - LIVE (Version 41, 2026-11-03 4:55 PM).**
 Mac decided crew get every project field except the dollars.
@@ -522,11 +574,13 @@ the plan should assume, and whether Spanish and guitar are daily rhythm items or
 goals with milestones.
 
 **Lane 2 queue — batch these into ONE Apps Script deploy, do not redeploy per item:**
-- `deleteProject` (archive-then-remove, same shape as `deleteTask`) — Mac asked for
-  a delete button on project tiles; there is no project delete action at all today.
-- `updateProject` (roadmap #4, also unblocks a per-project "keep visible" pin, which
-  is why the 11-02 hide-finished toggle is global-only for now).
-- The four daily-plan items above.
+- ~~`deleteProject`~~ ~~`updateProject`~~ **DONE in Version 42, 2026-11-05.** `updateProject`
+  now unblocks the per-project "keep visible" pin, which is why the 11-02 hide-finished
+  toggle is still global-only — the backend no longer stops that, only the UI does.
+- **Google Calendar into the SCHEDULE tab via `CalendarApp`.** Mac asked for this 11-05.
+  Small job, but it adds an OAuth scope and forces re-authorization, so give it a deploy
+  of its own where that is the only change. See the calendar note above.
+- The remaining daily-plan items above (3 and 4).
 - Google Tasks -> VOICE_INBOX puller on a morning time trigger. **The Inbox triage
   half is fully built and works; nothing feeds it.** `addVoiceEntry` is the only
   writer and it stamps Source=`App`, i.e. typed in by hand. Mac's intent was Gemini
