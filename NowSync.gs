@@ -6,17 +6,21 @@
 // scope in the web app project would force a re-authorization of the live exec
 // URL. Keeping it separate means the app itself is never touched.
 //
-// What it does: every 5 minutes it reads TASKS from the sheet, picks Mac's top
-// items for today, and rewrites the Google Tasks list "Now" to match. The free
-// Google Tasks home-screen widget on Mac's phone shows that list.
+// What it does, every 5 minutes:
+//   1. Anything Mac checked off in the "Now" list on his phone gets marked DONE
+//      in TASKS, with CompletedAt stamped, same as tapping DONE in the app.
+//   2. Reads TASKS, picks Mac's top items for today, and rewrites "Now" to match.
+//      The free Google Tasks home-screen widget shows that list.
 //
 // Order:
 //   1. Open tasks starred for today (Today column == today), any assignee,
 //      by priority.
 //   2. Then Mac's open work (AssignedTo Mac or blank), by priority. Same rule
 //      as the Work block on the MAC tab.
-//   Capped at 10. One-way only: the sheet drives the list. A box ticked in the
-//   widget is cleared on the next run.
+//   Capped at 10.
+//
+// The link between a Google Task and its TASKS row is kept in Script Properties
+// (key "map", googleTaskId -> sheet ID), rebuilt every time the list is rewritten.
 //
 // Setup (once): Services + add "Google Tasks API" (identifier Tasks), paste this
 // file, run setup(), approve the prompt. setup() makes the trigger and runs the
@@ -39,21 +43,56 @@ function setup() {
 }
 
 function syncNow() {
-  var want = pickNow_();
-  var listId = nowListId_();
-  var have = (Tasks.Tasks.list(listId, {showCompleted: true, showHidden: true, maxResults: 100}).items) || [];
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return;
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var map = JSON.parse(props.getProperty('map') || '{}');
+    var listId = nowListId_();
+    var have = (Tasks.Tasks.list(listId, {showCompleted: true, showHidden: true, maxResults: 100}).items) || [];
 
-  // Skip the rewrite when nothing changed, so the widget does not flicker.
-  var haveOpen = have.filter(function(t) { return t.status !== 'completed'; })
-                     .sort(function(a, b) { return String(a.position).localeCompare(String(b.position)); })
-                     .map(function(t) { return t.title; });
-  var same = have.length === want.length && haveOpen.join('\n') === want.map(function(w) { return w.title; }).join('\n');
-  if (same) return;
+    // 1. Ticked on the phone -> DONE in the sheet.
+    var ticked = have.filter(function(t) { return t.status === 'completed' && map[t.id]; })
+                     .map(function(t) { return map[t.id]; });
+    if (ticked.length) markDone_(ticked);
 
-  have.forEach(function(t) { Tasks.Tasks.remove(listId, t.id); });
-  // A new task with no "previous" lands at the top, so insert bottom-up.
-  for (var i = want.length - 1; i >= 0; i--) {
-    Tasks.Tasks.insert({title: want[i].title, notes: want[i].notes}, listId);
+    // 2. Rebuild the list. Skip when nothing changed, so the widget does not flicker.
+    var want = pickNow_();
+    var haveOpen = have.filter(function(t) { return t.status !== 'completed'; })
+                       .sort(function(a, b) { return String(a.position).localeCompare(String(b.position)); })
+                       .map(function(t) { return t.title; });
+    var same = !ticked.length && have.length === want.length &&
+               haveOpen.join('\n') === want.map(function(w) { return w.title; }).join('\n');
+    if (same) return;
+
+    have.forEach(function(t) { Tasks.Tasks.remove(listId, t.id); });
+    var newMap = {};
+    // A new task with no "previous" lands at the top, so insert bottom-up.
+    for (var i = want.length - 1; i >= 0; i--) {
+      var made = Tasks.Tasks.insert({title: want[i].title, notes: want[i].notes}, listId);
+      newMap[made.id] = want[i].id;
+    }
+    props.setProperty('map', JSON.stringify(newMap));
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Same writes as updateTaskStatus(id, 'DONE') in Code.gs: Status to DONE, and
+// CompletedAt stamped as plain text if it is empty. Columns found by header.
+function markDone_(ids) {
+  var sheet = SpreadsheetApp.openById(NOW.SHEET_ID).getSheetByName('TASKS');
+  var v = sheet.getDataRange().getValues();
+  var iId = v[0].indexOf('ID'), iStat = v[0].indexOf('Status'), iDone = v[0].indexOf('CompletedAt');
+  if (iDone < 0) { iDone = v[0].length; sheet.getRange(1, iDone + 1).setValue('CompletedAt'); }
+  var today = Utilities.formatDate(new Date(), NOW.TZ, 'yyyy-MM-dd');
+  var want = {};
+  ids.forEach(function(id) { want[String(id)] = true; });
+  for (var r = 1; r < v.length; r++) {
+    if (!want[String(v[r][iId])]) continue;
+    if (String(v[r][iStat]) === 'DONE') continue;
+    sheet.getRange(r + 1, iStat + 1).setValue('DONE');
+    if (!v[r][iDone]) sheet.getRange(r + 1, iDone + 1).setNumberFormat('@').setValue(today);
   }
 }
 
@@ -81,6 +120,7 @@ function pickNow_() {
     if (Object.prototype.toString.call(t) === '[object Date]') t = Utilities.formatDate(t, NOW.TZ, 'yyyy-MM-dd');
     var who = String(row[iWho] || '').trim();
     rows.push({
+      id: String(row[iId]),
       order: r,
       flagged: iToday >= 0 && String(t).trim() === today,
       mine: who === 'Mac' || who === '',
