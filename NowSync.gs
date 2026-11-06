@@ -34,11 +34,16 @@ var NOW = {
   EVERY_MIN: 5
 };
 
+// Safe to re-run. It clears its own triggers first, so running it again after a
+// paste updates the schedule instead of stacking a second copy of it.
 function setup() {
-  ScriptApp.getProjectTriggers().forEach(function(t) {
-    if (t.getHandlerFunction() === 'syncNow') ScriptApp.deleteTrigger(t);
+  ['pullInbox', 'syncNow'].forEach(function(fn) {
+    ScriptApp.getProjectTriggers().forEach(function(t) {
+      if (t.getHandlerFunction() === fn) ScriptApp.deleteTrigger(t);
+    });
+    ScriptApp.newTrigger(fn).timeBased().everyMinutes(NOW.EVERY_MIN).create();
   });
-  ScriptApp.newTrigger('syncNow').timeBased().everyMinutes(NOW.EVERY_MIN).create();
+  pullInbox();
   syncNow();
 }
 
@@ -139,4 +144,116 @@ function nowListId_() {
   var lists = (Tasks.Tasklists.list({maxResults: 100}).items) || [];
   for (var i = 0; i < lists.length; i++) if (lists[i].title === NOW.LIST_NAME) return lists[i].id;
   return Tasks.Tasklists.insert({title: NOW.LIST_NAME}).id;
+}
+
+// ============================================================
+// CAPTURE PULL - Google Tasks -> VOICE_INBOX
+// ============================================================
+// The missing half of the Inbox. Triage has worked since August but nothing
+// ever fed it: addVoiceEntry in the web app stamps Source=App, meaning typed
+// in by hand. This pulls anything captured by voice into VOICE_INBOX as
+// PENDING, so it shows up on the INBOX tab to be routed.
+//
+// Every 5 minutes:
+//   1. Reads every Google Tasks list EXCEPT the ones this project owns.
+//   2. Appends each new open task to VOICE_INBOX, Status PENDING, Source Voice.
+//   3. Marks that Google Task completed, so it drops out of the Tasks view and
+//      cannot be pulled a second time.
+//
+// Why every list and not just the default one: which list "OK Google, add a
+// task to ..." lands in depends on how the sentence comes out. Reading them
+// all means a capture cannot sit stranded in a list nothing was watching.
+//
+// THE ONE LIST IT MUST NOT READ IS "Now". syncNow() wipes and rewrites that
+// list every 5 minutes, so anything captured into it has about five minutes to
+// live. It is skipped by id AND by title below. Do not collapse that to one
+// check. If any other list is ever handed to a script, add it to CAP.SKIP.
+
+var CAP = {
+  SKIP: [NOW.LIST_NAME],   // lists this project writes - never pull from these
+  MAX: 25,                 // per run, so a long list cannot time the trigger out
+  SOURCE: 'Voice',
+  TAB: 'VOICE_INBOX',
+  REMEMBER: 100            // ids kept to block a re-pull; Script Properties cap 9KB
+};
+
+function pullInbox() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return;
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var pulled = JSON.parse(props.getProperty('pulled') || '[]');
+    var seen = {};
+    pulled.forEach(function(id) { seen[id] = 1; });
+
+    var lists = (Tasks.Tasklists.list({maxResults: 100}).items) || [];
+    var skipIds = {};
+    lists.forEach(function(l) {
+      if (CAP.SKIP.indexOf(l.title) >= 0) skipIds[l.id] = 1;
+    });
+
+    var rows = [], took = [];
+    for (var i = 0; i < lists.length && rows.length < CAP.MAX; i++) {
+      var l = lists[i];
+      if (skipIds[l.id]) continue;                     // by id
+      if (CAP.SKIP.indexOf(l.title) >= 0) continue;    // and by title
+      var items = (Tasks.Tasks.list(l.id, {showCompleted: false, maxResults: 100}).items) || [];
+      for (var j = 0; j < items.length && rows.length < CAP.MAX; j++) {
+        var t = items[j];
+        if (seen[t.id]) continue;              // completing it failed last run
+        var raw = String(t.title || '').trim();
+        if (!raw) continue;                    // Tasks allows an empty title
+        var note = String(t.notes || '').trim();
+        if (note) raw += ' - ' + note;
+        rows.push(raw);
+        took.push({list: l.id, task: t.id});
+      }
+    }
+    if (!rows.length) return;
+
+    // Sheet FIRST. If the append throws, nothing has been marked complete and
+    // the next run picks the same items up again. The other order would drop a
+    // capture on the floor, which is the one outcome that makes him stop
+    // trusting it.
+    appendInbox_(rows);
+
+    took.forEach(function(d) {
+      try {
+        Tasks.Tasks.patch({status: 'completed'}, d.list, d.task);
+      } catch (e) {
+        // Left open on purpose. The id below keeps it from being pulled twice.
+      }
+      pulled.push(d.task);
+    });
+    props.setProperty('pulled', JSON.stringify(pulled.slice(-CAP.REMEMBER)));
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Columns are found by header, not by index, so an inserted column in
+// VOICE_INBOX cannot silently write the wrong cell. One setValues for the whole
+// block, for the same reason savePersonalItems had to stop using appendRow: two
+// scripts appending a row at a time interleave and corrupt the tab.
+function appendInbox_(rows) {
+  var sheet = SpreadsheetApp.openById(NOW.SHEET_ID).getSheetByName(CAP.TAB);
+  var header = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+                    .map(function(x) { return String(x); });
+  var stamp = Utilities.formatDate(new Date(), NOW.TZ, 'yyyy-MM-dd HH:mm');
+  var fill = function(key, raw) {
+    if (key === 'ID') return Utilities.getUuid();
+    if (key === 'Raw') return raw;
+    if (key === 'Source') return CAP.SOURCE;
+    if (key === 'CreatedAt') return stamp;
+    if (key === 'Status') return 'PENDING';
+    return '';
+  };
+  var block = rows.map(function(raw) {
+    return header.map(function(k) { return fill(k, raw); });
+  });
+  var at = sheet.getLastRow() + 1;
+  // Plain text on CreatedAt so Sheets does not turn the stamp into a Date.
+  var iDate = header.indexOf('CreatedAt');
+  if (iDate >= 0) sheet.getRange(at, iDate + 1, block.length, 1).setNumberFormat('@');
+  sheet.getRange(at, 1, block.length, header.length).setValues(block);
 }

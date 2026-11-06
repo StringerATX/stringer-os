@@ -591,6 +591,45 @@ morning (he gave an example, not the list), roughly how many working hours a day
 the plan should assume, and whether Spanish and guitar are daily rhythm items or
 goals with milestones.
 
+## Capture and the "Now" list — `NowSync.gs` (2026-11-06)
+
+**Neither of these is in the web app.** They live in a SEPARATE standalone Apps
+Script project, **"Stringer OS Now Sync"**, id
+`1CagPX1BUsVDGmIEAYrqMfHErBSo6khRniPAM-ISSu4yenPoUCBPeQdQo`. That separation is
+the whole point: the Tasks API adds an OAuth scope, and a new scope inside the web
+app project forces a re-authorization of the live exec URL. **Do not move this code
+into `Code.gs`.** Two time triggers, both every 5 minutes, both created by `setup()`,
+which is safe to re-run.
+
+- **`pullInbox()` is the capture half.** Reads every Google Tasks list, appends each
+  new open task to `VOICE_INBOX` as PENDING with Source=`Voice`, then marks the
+  Google Task completed. This is what finally feeds triage — before it, the Inbox
+  tab worked but nothing wrote to it except `addVoiceEntry` (Source=`App`, typed by
+  hand). Mac's path is "OK Google" from the truck -> Google Tasks -> here.
+- **`syncNow()` is the push half**, built 11-05 by a parallel session. It wipes and
+  rewrites a Tasks list named **"Now"** from TASKS every 5 minutes, and marks
+  anything ticked there as DONE in the sheet.
+- **THE COLLISION: `pullInbox` must never read the "Now" list.** `syncNow` destroys
+  and recreates it on a 5-minute cycle, so a capture landing there dies within five
+  minutes. It is skipped by id AND by title in `CAP.SKIP`. **Do not collapse that to
+  one check, and add any future script-owned list to `CAP.SKIP`.**
+- **It reads every OTHER list on purpose,** not just `@default`. Which list Assistant
+  drops a spoken task into depends on the phrasing, so watching them all means a
+  capture cannot strand itself in a list nothing was reading.
+- **Order inside `pullInbox` is deliberate: sheet write FIRST, complete second.** If
+  the append throws, nothing is marked complete and the next run retries. The other
+  order drops the capture silently, which is the one failure that makes Mac stop
+  trusting the inbox.
+- A `pulled` id list in Script Properties (capped at 100) blocks a re-pull when the
+  complete call fails. Belt and suspenders on top of `showCompleted:false`.
+- `appendInbox_` looks columns up from the VOICE_INBOX header and writes the whole
+  block in ONE `setValues`, same rule as everywhere else in this project.
+- Untagged entries route to `task` by default (`routeDefault` in `index.html`), which
+  is the right default for a spoken capture. No tag needed.
+- Verified: 28 logic checks against stubbed Apps Script objects, covering the Now-list
+  skip both ways, the no-double-pull guard, a failed sheet write losing nothing, the
+  per-run cap, blank titles, and an inserted VOICE_INBOX column.
+
 **Lane 2 queue — batch these into ONE Apps Script deploy, do not redeploy per item:**
 - ~~`deleteProject`~~ ~~`updateProject`~~ **DONE in Version 42, 2026-11-05.** `updateProject`
   now unblocks the per-project "keep visible" pin, which is why the 11-02 hide-finished
@@ -599,11 +638,8 @@ goals with milestones.
   Small job, but it adds an OAuth scope and forces re-authorization, so give it a deploy
   of its own where that is the only change. See the calendar note above.
 - The remaining daily-plan items above (3 and 4).
-- Google Tasks -> VOICE_INBOX puller on a morning time trigger. **The Inbox triage
-  half is fully built and works; nothing feeds it.** `addVoiceEntry` is the only
-  writer and it stamps Source=`App`, i.e. typed in by hand. Mac's intent was Gemini
-  on his Galaxy S26 -> Google Tasks -> a trigger pulls new items in -> he triages.
-  That capture half was never built.
+- ~~Google Tasks -> VOICE_INBOX puller~~ **BUILT 2026-11-06, in `NowSync.gs`
+  (`pullInbox`), NOT in the web app.** See the capture note below.
 - Follow-ups Mac owns: confirm Alex Sanchez's jurisdiction; check with Arnold whether
   the two bee-caves concrete pours can have a weekend gap.
 
